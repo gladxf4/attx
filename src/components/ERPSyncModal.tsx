@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { X, Globe, Smartphone, RefreshCw, Check, ArrowRight, Info, ExternalLink } from "lucide-react";
+import { X, Zap, Globe, Smartphone, Lock, User, RefreshCw, Check, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 
 interface ERPSyncModalProps {
   isOpen: boolean;
@@ -14,19 +14,27 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
   onClose,
   onImportNumbers,
 }) => {
-  const [tab, setTab] = useState<"wrapped" | "manual">("wrapped");
-  const [syncStatusText, setSyncStatusText] = useState<string>("Ready • Log in to your college ERP below");
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncSuccess, setSyncSuccess] = useState<boolean>(false);
+  const [tab, setTab] = useState<"direct" | "wrapped" | "manual">("direct");
 
-  // Manual 3 numbers fallback
+  // Direct Connect Form (Our UI)
+  const [erpId, setErpId] = useState("");
+  const [password, setPassword] = useState("");
+  const [semId, setSemId] = useState("CS03");
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [directError, setDirectError] = useState<string | null>(null);
+  const [connectStepText, setConnectStepText] = useState("");
+
+  // Wrapped portal state
+  const [syncStatusText, setSyncStatusText] = useState<string>("Ready • Log in to your college ERP below");
+  const [isIframeSyncing, setIsIframeSyncing] = useState<boolean>(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Manual fallback inputs
   const [heldInput, setHeldInput] = useState<string>("");
   const [presentInput, setPresentInput] = useState<string>("");
   const [officialPctInput, setOfficialPctInput] = useState<string>("");
 
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  // Listen for messages from the wrapped ERP session
+  // Listen for messages from wrapped iframe if used
   useEffect(() => {
     if (!isOpen) return;
 
@@ -36,15 +44,13 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
 
       if (data.type === "ATTENDX_SYNC_PROGRESS") {
         setSyncStatusText(data.text || "Synchronizing attendance data...");
-        setIsSyncing(true);
+        setIsIframeSyncing(true);
       }
 
       if (data.type === "ATTENDX_SYNC_SUCCESS") {
-        setIsSyncing(false);
-        setSyncSuccess(true);
+        setIsIframeSyncing(false);
         setSyncStatusText("Attendance data retrieved successfully!");
 
-        // Save subjects if available
         if (data.subjects && Array.isArray(data.subjects) && data.subjects.length > 0) {
           try {
             localStorage.setItem("attendx_subjects", JSON.stringify(data.subjects));
@@ -61,11 +67,11 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
             data.officialPercentage ? Number(data.officialPercentage) : undefined
           );
           onClose();
-        }, 800);
+        }, 600);
       }
 
       if (data.type === "ATTENDX_SYNC_ERROR") {
-        setIsSyncing(false);
+        setIsIframeSyncing(false);
         setSyncStatusText(`Sync error: ${data.error || "Could not retrieve data"}`);
       }
     };
@@ -76,7 +82,64 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Manual calculations
+  // Direct Connect Handler (Native AttendX UI interacting with ERP backend)
+  const handleDirectConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDirectError(null);
+
+    if (!erpId.trim() || !password) {
+      setDirectError("Please enter both ERP ID and Password.");
+      return;
+    }
+
+    setIsConnecting(true);
+    setConnectStepText("Connecting to college ERP backend...");
+
+    try {
+      setConnectStepText("Authenticating session tokens with ERP...");
+      const res = await fetch("/api/erp/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          erpId: erpId.trim(),
+          password,
+          semId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to authenticate with ERP");
+      }
+
+      setConnectStepText("Attendance records retrieved successfully!");
+
+      // Save subject list
+      if (data.subjects && Array.isArray(data.subjects)) {
+        try {
+          localStorage.setItem("attendx_subjects", JSON.stringify(data.subjects));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      setTimeout(() => {
+        onImportNumbers(
+          Number(data.totalHeld),
+          Number(data.academicPresent),
+          Number(data.concessionBuffer || 0),
+          data.officialPercentage ? Number(data.officialPercentage) : undefined
+        );
+        onClose();
+      }, 700);
+    } catch (err: any) {
+      setDirectError(err.message || "Failed to sync from ERP.");
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  // Manual fallback calculations
   const heldNum = Number(heldInput) || 0;
   const presNum = Number(presentInput) || 0;
   const offPctNum = Number(officialPctInput) || 0;
@@ -93,7 +156,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
   };
 
   const handleTriggerIframeSync = () => {
-    setIsSyncing(true);
+    setIsIframeSyncing(true);
     setSyncStatusText("Requesting attendance from current ERP session...");
     if (iframeRef.current && iframeRef.current.contentWindow) {
       iframeRef.current.contentWindow.postMessage({ action: "TRIGGER_SYNC" }, "*");
@@ -109,13 +172,13 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm">
-      <div className="w-full max-w-2xl clean-card p-4 sm:p-5 shadow-2xl relative border border-zinc-800 flex flex-col max-h-[92vh]">
+      <div className="w-full max-w-xl clean-card p-5 sm:p-6 shadow-2xl relative border border-zinc-800 flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
           <div>
-            <h3 className="text-sm font-semibold text-white">College ERP Attendance Sync</h3>
+            <h3 className="text-sm font-semibold text-white">Direct ERP Attendance Sync</h3>
             <p className="text-xs text-zinc-400">
-              Log into the official ERP portal to automatically extract your verified attendance
+              Direct connection to the college ERP backend — zero scrapers, pure native UI
             </p>
           </div>
           <button
@@ -127,7 +190,16 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
         </div>
 
         {/* Tab Switcher */}
-        <div className="grid grid-cols-2 p-1 bg-zinc-900 rounded-lg border border-zinc-800 my-3 text-xs font-medium">
+        <div className="grid grid-cols-3 p-1 bg-zinc-900 rounded-lg border border-zinc-800 my-3 text-xs font-medium">
+          <button
+            onClick={() => setTab("direct")}
+            className={`py-1.5 rounded flex items-center justify-center space-x-1.5 transition ${
+              tab === "direct" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Zap className="h-3.5 w-3.5 text-amber-400" />
+            <span>Direct Connect</span>
+          </button>
           <button
             onClick={() => setTab("wrapped")}
             className={`py-1.5 rounded flex items-center justify-center space-x-1.5 transition ${
@@ -135,7 +207,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
             }`}
           >
             <Globe className="h-3.5 w-3.5" />
-            <span>Wrapped ERP Portal</span>
+            <span>Portal View</span>
           </button>
           <button
             onClick={() => setTab("manual")}
@@ -148,12 +220,105 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
           </button>
         </div>
 
-        {tab === "wrapped" ? (
+        {/* TAB 1: Direct Connect (Our native UI interacting with ERP backend) */}
+        {tab === "direct" && (
+          <form onSubmit={handleDirectConnect} className="space-y-4 py-1">
+            <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 text-xs text-zinc-300 leading-relaxed">
+              AttendX acts as a native ERP client: your credentials authenticate directly against the official ERP authentication endpoints and instantly retrieve your live attendance metrics and subject records.
+            </div>
+
+            {directError && (
+              <div className="flex items-center space-x-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{directError}</span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Admission No / ERP ID *
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                  <input
+                    type="text"
+                    required
+                    value={erpId}
+                    onChange={(e) => setErpId(e.target.value)}
+                    placeholder="2025B15... or 2024B..."
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900 pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  ERP Password *
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900 pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Current Semester
+                </label>
+                <select
+                  value={semId}
+                  onChange={(e) => setSemId(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 font-mono"
+                >
+                  <option value="CS03">CS03 — 3rd Semester (Current Regular)</option>
+                  <option value="CS05">CS05 — 5th Semester</option>
+                  <option value="CS07">CS07 — 7th Semester</option>
+                  <option value="CS01">CS01 — 1st Semester</option>
+                </select>
+              </div>
+            </div>
+
+            {isConnecting && (
+              <div className="flex items-center space-x-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg animate-pulse">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                <span>{connectStepText}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isConnecting}
+              className="w-full flex items-center justify-center space-x-2 rounded-lg bg-white text-zinc-950 font-medium py-2.5 text-xs hover:bg-zinc-200 transition disabled:opacity-50 shadow-md"
+            >
+              {isConnecting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Connecting to ERP Backend...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                  <span>Connect & Sync from ERP</span>
+                </>
+              )}
+            </button>
+          </form>
+        )}
+
+        {/* TAB 2: Wrapped Portal View (In-App Browser fallback) */}
+        {tab === "wrapped" && (
           <div className="flex-1 flex flex-col min-h-0 space-y-2.5">
-            {/* Status & Action Bar */}
             <div className="p-2.5 bg-zinc-900/90 rounded-lg border border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
               <div className="flex items-center space-x-2">
-                <span className={`h-2 w-2 rounded-full ${syncSuccess ? "bg-emerald-400" : isSyncing ? "bg-amber-400 animate-pulse" : "bg-blue-400"}`} />
+                <span className={`h-2 w-2 rounded-full ${isIframeSyncing ? "bg-amber-400 animate-pulse" : "bg-blue-400"}`} />
                 <span className="text-zinc-300 font-medium truncate">{syncStatusText}</span>
               </div>
 
@@ -170,17 +335,16 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                 <button
                   type="button"
                   onClick={handleTriggerIframeSync}
-                  disabled={isSyncing}
+                  disabled={isIframeSyncing}
                   className="px-3 py-1 rounded bg-white text-zinc-950 font-semibold flex items-center space-x-1 text-[11px] hover:bg-zinc-200 transition disabled:opacity-50"
                 >
                   <Check className="h-3 w-3" />
-                  <span>{isSyncing ? "Syncing..." : "Fetch Attendance Now"}</span>
+                  <span>{isIframeSyncing ? "Syncing..." : "Fetch Attendance"}</span>
                 </button>
               </div>
             </div>
 
-            {/* In-App Browser Wrapper */}
-            <div className="flex-1 w-full min-h-[380px] sm:min-h-[440px] rounded-lg border border-zinc-800 overflow-hidden bg-white relative">
+            <div className="flex-1 w-full min-h-[380px] rounded-lg border border-zinc-800 overflow-hidden bg-white relative">
               <iframe
                 ref={iframeRef}
                 src="/api/erp-proxy/Login.aspx"
@@ -189,25 +353,14 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                 sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
               />
             </div>
-
-            <p className="text-[11px] text-zinc-500">
-              💡 Tip: Enter your ERP ID & password above. Once logged in, your attendance numbers and subject list will sync automatically into AttendX.
-            </p>
           </div>
-        ) : (
-          <div className="space-y-3.5 py-2">
-            <div className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1">
-              <div className="flex items-center space-x-1.5 text-zinc-300 font-medium text-xs">
-                <Info className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-                <span>Notice: ERP Attendance Timing</span>
-              </div>
-              <p className="text-[11px] text-zinc-400 leading-normal">
-                ERP displays the latest recorded attendance which may miss today’s lectures if individual professors have not submitted them yet.
-              </p>
-            </div>
+        )}
 
+        {/* TAB 3: Manual 3 Numbers */}
+        {tab === "manual" && (
+          <div className="space-y-3.5 py-2">
             <p className="text-xs text-zinc-400">
-              Enter the 3 numbers shown on your ERP portal:
+              Enter the 3 numbers shown on your official ERP portal:
             </p>
 
             <div className="grid grid-cols-2 gap-2.5">
