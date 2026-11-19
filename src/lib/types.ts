@@ -4,27 +4,31 @@ export interface UserProfile {
   name?: string;
   branch?: string;
   sem?: string;
-  totalHeld: number; // As of Wednesday 18 Nov baseline
-  academicPresent: number; // As of Wednesday 18 Nov baseline
-  thursdayHeld: number; // Thursday 19 Nov
-  thursdayPresent: number; // Thursday 19 Nov
+  totalHeld: number; // Previous day baseline
+  academicPresent: number; // Previous day baseline
+  thursdayHeld: number; // Today
+  thursdayPresent: number; // Today
   targetPercentage: number;
 }
 
 export interface AttendanceMetrics {
-  // Wednesday baseline
+  // Baseline (e.g. Wednesday 18 Nov)
   wednesdayHeld: number;
   wednesdayPresent: number;
   wednesdayPercentage: number;
+  baselineDateStr: string;
+  baselineRelativeText: string;
 
-  // Thursday status
+  // Today (e.g. Thursday 19 Nov)
   thursdayHeld: number;
   thursdayPresent: number;
 
-  // Cumulative current status (including Thursday)
+  // Cumulative current status (including Today)
   currentTotalHeld: number;
   currentTotalPresent: number;
-  currentPercentage: number;
+  currentPercentage: number; // Higher % (used by college)
+  rawPercentage: number; // Lower % (raw academic table)
+  concessionBuffer: number;
 
   // Target & Bunking Metrics
   targetPercentage: number;
@@ -33,12 +37,12 @@ export interface AttendanceMetrics {
   safeDaysBunkable: number;
   classesNeededFor75: number;
 
-  // MT2 Specific Forecast (Exams start Nov 30)
+  // MT2 Forecast (Exams start Nov 30)
   workingDaysUntilMT2: number;
   totalLecturesUntilMT2: number;
   minClassesToAttendBeforeMT2: number;
 
-  // Humor & Status
+  // Status & Note
   goofyQuote: string;
   statusTier: "safe" | "caution" | "critical";
 }

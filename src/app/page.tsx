@@ -7,6 +7,7 @@ import { BunkCalculatorCard } from "@/components/BunkCalculatorCard";
 import { MT2CalendarView } from "@/components/MT2CalendarView";
 import { EditBaselineModal } from "@/components/EditBaselineModal";
 import { SubjectAuditModal } from "@/components/SubjectAuditModal";
+import { ERPSyncModal } from "@/components/ERPSyncModal";
 import { GuestOnboarding } from "@/components/GuestOnboarding";
 import { UserProfile, AttendanceMetrics } from "@/lib/types";
 
@@ -18,6 +19,7 @@ export default function Home() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSubjectsOpen, setIsSubjectsOpen] = useState(false);
+  const [isSyncOpen, setIsSyncOpen] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -155,10 +157,21 @@ export default function Home() {
     }
   };
 
+  const handleImportFromERP = (held: number, present: number, buffer: number = 16) => {
+    const updated = {
+      totalHeld: held,
+      academicPresent: present,
+      thursdayHeld: metrics?.thursdayHeld || 8,
+      thursdayPresent: metrics?.thursdayPresent || 0,
+      targetPercentage: metrics?.targetPercentage || 75,
+    };
+    handleSaveSettings(updated);
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-zinc-500 text-sm">
-        Loading AttendX...
+      <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-zinc-500 text-xs font-mono">
+        Loading...
       </div>
     );
   }
@@ -179,23 +192,24 @@ export default function Home() {
         user={user}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenSubjects={() => setIsSubjectsOpen(true)}
+        onOpenSync={() => setIsSyncOpen(true)}
         onReset={handleReset}
       />
 
-      <main className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+      <main className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 sm:py-8 space-y-4">
         <AttendanceHero metrics={metrics} />
         <BunkCalculatorCard metrics={metrics} />
         <MT2CalendarView metrics={metrics} />
       </main>
 
-      <footer className="w-full border-t border-zinc-900 py-5 text-center text-xs text-zinc-500">
+      <footer className="w-full border-t border-zinc-900 py-4 text-center text-xs text-zinc-500">
         <div className="mx-auto max-w-4xl px-4 flex items-center justify-between">
-          <span>AttendX • ABES Attendance & Bunk Predictor</span>
+          <span>AttendX • ABES</span>
           <button
             onClick={handleReset}
             className="text-zinc-500 hover:text-zinc-300 transition"
           >
-            Clear Data / Change User
+            Clear Data / Change Preset
           </button>
         </div>
       </footer>
@@ -211,6 +225,12 @@ export default function Home() {
       <SubjectAuditModal
         isOpen={isSubjectsOpen}
         onClose={() => setIsSubjectsOpen(false)}
+      />
+
+      <ERPSyncModal
+        isOpen={isSyncOpen}
+        onClose={() => setIsSyncOpen(false)}
+        onImportNumbers={handleImportFromERP}
       />
     </div>
   );
