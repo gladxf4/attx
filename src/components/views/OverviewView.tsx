@@ -15,6 +15,7 @@ interface Props {
   horizon: Horizon;
   today: string;
   lecturesPerDay: number;
+  isWorkingDay: boolean;
   todayTotals: { held: number; present: number };
   erpToday: { held: number; present: number };
   subjects: SubjectRecord[];
@@ -45,6 +46,7 @@ export function OverviewView(p: Props) {
 
   const daysToCutoff = diffDays(p.today, h.cutoffDate);
   const skipDaysText = describeDays(m.safeBunks, p.lecturesPerDay);
+  const todayUnmarked = p.isWorkingDay ? Math.max(0, p.lecturesPerDay - p.todayTotals.held) : 0;
 
   const atRisk = [...p.subjects].sort((a, b) => a.pct - b.pct).slice(0, 5);
 
@@ -186,8 +188,15 @@ export function OverviewView(p: Props) {
           {p.todayTotals.held === 0
             ? "Nothing marked yet."
             : `${p.todayTotals.present} attended · ${p.todayTotals.held - p.todayTotals.present} missed`}
-          {p.erpToday.held > 0 && <span className="text-zinc-500"> · {p.erpToday.held} from ERP</span>}
+          {todayUnmarked > 0 && p.todayTotals.held > 0 && (
+            <span className="font-medium text-amber-300"> · {todayUnmarked} unmarked</span>
+          )}
         </p>
+        {p.erpToday.held > 0 && (
+          <p className="num mt-1 text-xs text-zinc-500">
+            {p.erpToday.held} of {p.lecturesPerDay} on the ERP so far
+          </p>
+        )}
         <button type="button" onClick={() => p.go("today")} className="btn btn-subtle mt-5 w-full">
           <CalendarCheck2 className="h-4 w-4" /> Mark today&apos;s periods
         </button>

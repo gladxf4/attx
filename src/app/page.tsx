@@ -17,7 +17,7 @@ import { ErpSheet } from "@/components/sheets/ErpSheet";
 import { SettingsSheet } from "@/components/sheets/SettingsSheet";
 import { FeedbackSheet } from "@/components/sheets/FeedbackSheet";
 import { AuthForm, AuthResult } from "@/components/sheets/AuthForm";
-import { CalendarPrefs, holidayReason, resolveCalendar } from "@/lib/academicCalendar";
+import { CalendarPrefs, holidayReason, isWorkingDay, resolveCalendar } from "@/lib/academicCalendar";
 import { computeMetrics, getHorizon, officialPresentFrom } from "@/lib/attendanceEngine";
 import { isoDateInCollegeTz, todayISO } from "@/lib/dates";
 import { clearErpSession, ErpSyncResult, loadErpSession, refreshErp } from "@/lib/erpClient";
@@ -511,6 +511,7 @@ export default function Home() {
                 horizon={horizon}
                 today={today}
                 lecturesPerDay={cal.lecturesPerDay}
+                isWorkingDay={isWorkingDay(today, cal)}
                 todayTotals={todayTotals}
                 erpToday={erpTotals}
                 subjects={subjects}

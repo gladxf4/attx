@@ -29,6 +29,7 @@ export function TodayView(p: Props) {
 
   const manualHeld = p.subjects.reduce((a, s) => a + (s.todayHeld || 0), 0);
   const slotsLeft = Math.max(0, p.lecturesPerDay - p.erpTotals.held - manualHeld);
+  const unmarked = Math.max(0, p.lecturesPerDay - p.todayTotals.held);
   const erpCodes = new Set(p.erpLogs.map((l) => (l.code || "").trim()));
 
   const mark = (code: string, dHeld: number, dPres: number) => {
@@ -58,9 +59,22 @@ export function TodayView(p: Props) {
           <div>
             <p className="eyebrow">Today</p>
             <h2 className="mt-1 text-3xl font-extrabold text-white sm:text-4xl">{longDate(p.today)}</h2>
-            <p className="mt-1.5 text-sm text-zinc-400">
-              {p.closedReason ? `${p.closedReason} — mark anything that still happened.` : `${p.lecturesPerDay} periods scheduled`}
-            </p>
+            {p.closedReason ? (
+              <p className="mt-1.5 text-sm text-zinc-400">{p.closedReason} — mark anything that still happened.</p>
+            ) : (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {p.erpTotals.held > 0 && (
+                  <span className="chip chip-neutral num">
+                    {p.erpTotals.held} of {p.lecturesPerDay} on the ERP
+                  </span>
+                )}
+                {unmarked > 0 ? (
+                  <span className="chip chip-warn num">{unmarked} unmarked</span>
+                ) : (
+                  <span className="chip chip-safe">All {p.lecturesPerDay} marked</span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
@@ -96,6 +110,7 @@ export function TodayView(p: Props) {
             <Legend className="bg-rose-400" label="Absent (ERP)" />
             <Legend className="bg-brand-400" label="Present (you)" />
             <Legend className="bg-amber-400" label="Absent (you)" />
+            <Legend className="bg-white/[0.15]" label="Unmarked" />
           </div>
         </div>
       </section>
