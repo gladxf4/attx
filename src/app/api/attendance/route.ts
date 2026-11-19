@@ -18,13 +18,14 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { totalHeld, academicPresent, thursdayHeld, thursdayPresent, targetPercentage, branch } = body;
+    const { totalHeld, academicPresent, thursdayHeld, thursdayPresent, targetPercentage, branch, factorBuffer } = body;
 
     const updated = await sql`
       UPDATE attendx_web_users
       SET
         total_held = COALESCE(${totalHeld !== undefined ? Number(totalHeld) : null}, total_held),
         academic_present = COALESCE(${academicPresent !== undefined ? Number(academicPresent) : null}, academic_present),
+        factor_buffer = COALESCE(${factorBuffer !== undefined ? Number(factorBuffer) : null}, factor_buffer),
         thursday_held = COALESCE(${thursdayHeld !== undefined ? Number(thursdayHeld) : null}, thursday_held),
         thursday_present = COALESCE(${thursdayPresent !== undefined ? Number(thursdayPresent) : null}, thursday_present),
         target_percentage = COALESCE(${targetPercentage !== undefined ? Number(targetPercentage) : null}, target_percentage),

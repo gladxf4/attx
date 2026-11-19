@@ -7,9 +7,10 @@ export async function POST(req: Request) {
     const {
       totalHeld = 421,
       academicPresent = 316,
-      thursdayHeld = 3,
-      thursdayPresent = 3,
+      thursdayHeld = 8,
+      thursdayPresent = 0,
       targetPercentage = 75,
+      concessionBuffer = 16,
       simulateFutureClasses,
       simulateAttendedClasses,
     } = body;
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
       Number(thursdayHeld),
       Number(thursdayPresent),
       Number(targetPercentage),
-      16 // Protected server-side institutional factor
+      Number(concessionBuffer)
     );
 
     let simulation = null;

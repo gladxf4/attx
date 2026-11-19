@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Copy, Check, ExternalLink, RefreshCw } from "lucide-react";
+import { X, Smartphone, ClipboardPaste, Terminal, Check, ArrowRight, Info } from "lucide-react";
 
 interface ERPSyncModalProps {
   isOpen: boolean;
@@ -14,73 +14,68 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
   onClose,
   onImportNumbers,
 }) => {
-  const [copied, setCopied] = useState(false);
-  const [pasteData, setPasteData] = useState("");
-  const [parseError, setParseError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"mobile" | "paste" | "script">("mobile");
+
+  // Mobile 3-number match
+  const [heldInput, setHeldInput] = useState<string>("424");
+  const [presentInput, setPresentInput] = useState<string>("319");
+  const [officialPctInput, setOfficialPctInput] = useState<string>("79.01");
+
+  // Paste raw text
+  const [rawText, setRawText] = useState<string>("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
+
+  // Script copy
+  const [copied, setCopied] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
-  // The 1-click sync script for ERP console
-  const syncScript = `
-(async () => {
-  try {
-    const sem = $('#MainContent_ddlsem').val() || 'CS03';
-    const sRes = await fetch('Default.aspx/getStudentAtt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ StudentDashBAL: { semid: sem, mode: 'MyAttendance' } })
-    });
-    const sJson = JSON.parse((await sRes.json()).d);
-    const totalRow = sJson[sJson.length - 1];
-    
-    const eRes = await fetch('Default.aspx/getEventAtt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ StudentDashBAL: { semid: sem, mode: 'MyEventAttendance' } })
-    });
-    const eJson = JSON.parse((await eRes.json()).d);
-    const higherPct = eJson[0].PER;
-    const concession = eJson[1]?.Numerator || 0;
+  // Auto calculate buffer from 3 numbers
+  const heldNum = Number(heldInput) || 0;
+  const presNum = Number(presentInput) || 0;
+  const offPctNum = Number(officialPctInput) || 0;
 
-    const payload = JSON.stringify({
-      held: parseInt(totalRow.NoOfLecture),
-      present: parseInt(totalRow.Present),
-      higherPercentage: higherPct,
-      concession: concession
-    });
-    
-    navigator.clipboard.writeText(payload);
-    alert('✅ AttendX Sync Data copied to clipboard! Switch back to AttendX and paste it.');
-  } catch(e) {
-    alert('Sync error: ' + e.message);
-  }
-})();
-`.trim();
+  const rawPct = heldNum > 0 ? (presNum / heldNum) * 100 : 0;
+  const effectivePres = Math.round((offPctNum / 100.0) * heldNum);
+  const detectedBuffer = Math.max(0, effectivePres - presNum);
+  const higherPct = heldNum > 0 ? ((presNum + detectedBuffer) / heldNum) * 100 : 0;
 
-  const handleCopyScript = () => {
-    navigator.clipboard.writeText(syncScript);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleApplyMobileMatch = () => {
+    if (heldNum <= 0 || presNum < 0) return;
+    onImportNumbers(heldNum, presNum, detectedBuffer);
+    onClose();
   };
 
-  const handleParsePaste = () => {
-    setParseError(null);
+  const handleParseRawText = () => {
+    setPasteError(null);
     try {
-      const parsed = JSON.parse(pasteData.trim());
-      if (parsed.held && parsed.present !== undefined) {
-        onImportNumbers(parsed.held, parsed.present, parsed.concession || 16);
+      // Find "Attendance % : 79.01"
+      const pctMatch = rawText.match(/Attendance\s*%\s*:\s*([\d\.]+)/i);
+      const parsedPct = pctMatch ? parseFloat(pctMatch[1]) : null;
+
+      // Find "Total:- 424 319 105" or "Total 424 319"
+      const totalMatch = rawText.match(/Total[:\s\-]+(\d+)\s+(\d+)\s+(\d+)/i);
+      if (totalMatch) {
+        const h = parseInt(totalMatch[1]);
+        const p = parseInt(totalMatch[2]);
+        const eff = parsedPct ? Math.round((parsedPct / 100.0) * h) : p + 16;
+        const buf = Math.max(0, eff - p);
+        onImportNumbers(h, p, buf);
         onClose();
         return;
       }
-      throw new Error("Missing 'held' or 'present' fields.");
-    } catch {
-      setParseError("Invalid format. Please run the sync code on your ERP tab and paste the copied result.");
+      throw new Error("Could not find Total row in pasted text.");
+    } catch (e: any) {
+      setPasteError("Could not auto-detect attendance. Try using the Quick Match tab instead.");
     }
   };
 
+  // Desktop snippet
+  const desktopSnippet = `(async()=>{const s=$('#MainContent_ddlsem').val()||'CS03';const r=await fetch('Default.aspx/getStudentAtt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({StudentDashBAL:{semid:s,mode:'MyAttendance'}})});const t=(await r.json()).d;const j=JSON.parse(t);const o=j[j.length-1];const er=await fetch('Default.aspx/getEventAtt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({StudentDashBAL:{semid:s,mode:'MyEventAttendance'}})});const ej=JSON.parse((await er.json()).d);navigator.clipboard.writeText(JSON.stringify({held:parseInt(o.NoOfLecture),present:parseInt(o.Present),concession:ej[1]?.Numerator||16}));alert('Copied AttendX Data!');})();`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-lg clean-card p-6 shadow-2xl relative border border-zinc-800">
+      <div className="w-full max-w-md clean-card p-5 sm:p-6 shadow-2xl relative border border-zinc-800">
         <button
           onClick={onClose}
           className="absolute right-4 top-4 text-zinc-400 hover:text-white transition"
@@ -88,65 +83,168 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
           <X className="h-4 w-4" />
         </button>
 
-        <h3 className="text-sm font-semibold text-white mb-1">Sync Directly from ABES ERP</h3>
-        <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
-          Because ERP blocks external iframes via security policies, you can sync your exact attendance records and concession buffer in 1 click using this script.
+        <h3 className="text-sm font-semibold text-white mb-1">Sync from ABES ERP</h3>
+        <p className="text-xs text-zinc-400 mb-4">
+          Match your official numbers without needing a laptop console.
         </p>
 
-        {/* Step 1 */}
-        <div className="space-y-3">
-          <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 space-y-2">
-            <span className="text-xs font-medium text-zinc-200 block">
-              Step 1: Copy ERP Sync Snippet
-            </span>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] text-zinc-400 truncate font-mono">
-                Runs on your open ERP tab to extract total, present, and higher %
-              </span>
+        {/* Tab Switcher */}
+        <div className="grid grid-cols-3 p-1 bg-zinc-900 rounded-lg border border-zinc-800 mb-4 text-xs font-medium">
+          <button
+            onClick={() => setTab("mobile")}
+            className={`py-1.5 rounded flex items-center justify-center space-x-1 transition ${
+              tab === "mobile" ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Smartphone className="h-3 w-3" />
+            <span>3 Numbers</span>
+          </button>
+          <button
+            onClick={() => setTab("paste")}
+            className={`py-1.5 rounded flex items-center justify-center space-x-1 transition ${
+              tab === "paste" ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <ClipboardPaste className="h-3 w-3" />
+            <span>Paste Text</span>
+          </button>
+          <button
+            onClick={() => setTab("script")}
+            className={`py-1.5 rounded flex items-center justify-center space-x-1 transition ${
+              tab === "script" ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Terminal className="h-3 w-3" />
+            <span>Desktop</span>
+          </button>
+        </div>
+
+        {tab === "mobile" && (
+          <div className="space-y-3.5">
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Enter the 3 numbers displayed on your ERP Attendance screen:
+            </p>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-[11px] text-zinc-400 mb-0.5">
+                  1. Total Held (bottom row)
+                </label>
+                <input
+                  type="number"
+                  value={heldInput}
+                  onChange={(e) => setHeldInput(e.target.value)}
+                  placeholder="e.g. 424"
+                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-zinc-400 mb-0.5">
+                  2. Present (bottom row)
+                </label>
+                <input
+                  type="number"
+                  value={presentInput}
+                  onChange={(e) => setPresentInput(e.target.value)}
+                  placeholder="e.g. 319"
+                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-zinc-400 mb-0.5">
+                3. Official % Shown (top of page)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={officialPctInput}
+                onChange={(e) => setOfficialPctInput(e.target.value)}
+                placeholder="e.g. 79.01"
+                className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
+              />
+            </div>
+
+            {/* Live Calculation Preview */}
+            <div className="p-3 bg-zinc-900 rounded-md border border-zinc-800 text-xs space-y-1.5">
+              <div className="flex items-center justify-between text-zinc-300">
+                <span>Raw Academic (Lower %):</span>
+                <span className="font-mono text-zinc-400">{rawPct.toFixed(2)}%</span>
+              </div>
+              <div className="flex items-center justify-between text-zinc-300">
+                <span>Official College (Higher %):</span>
+                <span className="font-mono font-bold text-white">{higherPct.toFixed(2)}%</span>
+              </div>
+              <div className="flex items-center justify-between text-zinc-400 text-[11px] pt-1 border-t border-zinc-800/80">
+                <span>Detected Concession Buffer:</span>
+                <span className="font-mono text-emerald-400 font-semibold">+{detectedBuffer} classes</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleApplyMobileMatch}
+              className="w-full flex items-center justify-center space-x-1.5 rounded-lg bg-white text-zinc-950 font-medium py-2 text-xs hover:bg-zinc-200 transition"
+            >
+              <span>Sync Numbers</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {tab === "paste" && (
+          <div className="space-y-3">
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              On your phone, select all text on your ERP attendance page &rarr; Copy &rarr; Paste here:
+            </p>
+
+            <textarea
+              rows={4}
+              value={rawText}
+              onChange={(e) => setRawText(e.target.value)}
+              placeholder="Paste copied ERP page text here..."
+              className="w-full rounded border border-zinc-800 bg-zinc-900 p-2 text-xs text-white placeholder-zinc-600 focus:outline-none font-mono"
+            />
+
+            {pasteError && (
+              <span className="text-[11px] text-rose-400 block">{pasteError}</span>
+            )}
+
+            <button
+              onClick={handleParseRawText}
+              disabled={!rawText.trim()}
+              className="w-full rounded-lg bg-white text-zinc-950 font-medium py-2 text-xs hover:bg-zinc-200 transition disabled:opacity-40"
+            >
+              Auto-Extract & Sync
+            </button>
+          </div>
+        )}
+
+        {tab === "script" && (
+          <div className="space-y-3">
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              For laptops: Open ERP &rarr; F12 &rarr; Console, paste this snippet:
+            </p>
+
+            <div className="relative">
+              <pre className="p-2.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-300 overflow-x-auto max-h-24">
+                {desktopSnippet}
+              </pre>
               <button
-                onClick={handleCopyScript}
-                className="shrink-0 flex items-center space-x-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-2.5 py-1 text-xs transition"
+                onClick={() => {
+                  navigator.clipboard.writeText(desktopSnippet);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="mt-2 w-full flex items-center justify-center space-x-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 py-1.5 text-xs transition"
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                <span>{copied ? "Copied" : "Copy Code"}</span>
+                {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : null}
+                <span>{copied ? "Copied Snippet!" : "Copy Snippet"}</span>
               </button>
             </div>
           </div>
-
-          {/* Step 2 */}
-          <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 space-y-2">
-            <span className="text-xs font-medium text-zinc-200 block">
-              Step 2: Paste in ERP Console
-            </span>
-            <p className="text-[11px] text-zinc-400 leading-normal">
-              On your logged-in ERP Attendance page, press <code className="bg-zinc-800 px-1 rounded text-zinc-200">F12</code> &rarr; Console, paste, and press Enter. It automatically copies your sync payload.
-            </p>
-          </div>
-
-          {/* Step 3 */}
-          <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800 space-y-2">
-            <span className="text-xs font-medium text-zinc-200 block">
-              Step 3: Paste Copied Payload Here
-            </span>
-            <input
-              type="text"
-              value={pasteData}
-              onChange={(e) => setPasteData(e.target.value)}
-              placeholder='Paste JSON here (e.g. {"held":424,"present":319...})'
-              className="w-full rounded border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
-            />
-            {parseError && (
-              <span className="text-[11px] text-rose-400 block">{parseError}</span>
-            )}
-            <button
-              onClick={handleParsePaste}
-              disabled={!pasteData.trim()}
-              className="w-full rounded bg-white text-zinc-950 font-medium py-1.5 text-xs hover:bg-zinc-200 transition disabled:opacity-40"
-            >
-              Apply ERP Sync
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

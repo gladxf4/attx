@@ -80,6 +80,7 @@ export default function Home() {
     thursdayHeld: number;
     thursdayPresent: number;
     targetPercentage: number;
+    concessionBuffer?: number;
   }) => {
     localStorage.setItem("attendx_guest_data", JSON.stringify(data));
     try {
@@ -127,8 +128,11 @@ export default function Home() {
     thursdayHeld: number;
     thursdayPresent: number;
     targetPercentage: number;
+    concessionBuffer?: number;
   }) => {
     const token = localStorage.getItem("attendx_token");
+    const bufferVal = data.concessionBuffer !== undefined ? data.concessionBuffer : (metrics?.concessionBuffer || 16);
+
     if (token && user) {
       const res = await fetch("/api/attendance", {
         method: "PUT",
@@ -136,7 +140,10 @@ export default function Home() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          factorBuffer: bufferVal,
+        }),
       });
       if (res.ok) {
         const resData = await res.json();
@@ -144,11 +151,12 @@ export default function Home() {
         setMetrics(resData.metrics);
       }
     } else {
-      localStorage.setItem("attendx_guest_data", JSON.stringify(data));
+      const guestPayload = { ...data, concessionBuffer: bufferVal };
+      localStorage.setItem("attendx_guest_data", JSON.stringify(guestPayload));
       const calcRes = await fetch("/api/calculate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(guestPayload),
       });
       if (calcRes.ok) {
         const calcData = await calcRes.json();
@@ -161,9 +169,10 @@ export default function Home() {
     const updated = {
       totalHeld: held,
       academicPresent: present,
-      thursdayHeld: metrics?.thursdayHeld || 8,
-      thursdayPresent: metrics?.thursdayPresent || 0,
-      targetPercentage: metrics?.targetPercentage || 75,
+      thursdayHeld: metrics?.thursdayHeld ?? 8,
+      thursdayPresent: metrics?.thursdayPresent ?? 0,
+      targetPercentage: metrics?.targetPercentage ?? 75,
+      concessionBuffer: buffer,
     };
     handleSaveSettings(updated);
   };
@@ -176,7 +185,6 @@ export default function Home() {
     );
   }
 
-  // If no user or guest data has been provided, show the clean gateway
   if (!hasData || !metrics) {
     return (
       <GuestOnboarding
