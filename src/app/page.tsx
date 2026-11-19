@@ -5,7 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { AttendanceHero } from "@/components/AttendanceHero";
 import { BunkCalculatorCard } from "@/components/BunkCalculatorCard";
 import { TodayPeriodTracker } from "@/components/TodayPeriodTracker";
-import { MT2CalendarView } from "@/components/MT2CalendarView";
+import { AttendanceCalendarView } from "@/components/AttendanceCalendarView";
 import { EditBaselineModal } from "@/components/EditBaselineModal";
 import { SubjectAuditModal } from "@/components/SubjectAuditModal";
 import { ERPSyncModal } from "@/components/ERPSyncModal";
@@ -221,24 +221,30 @@ export default function Home() {
       finalBuffer = Math.max(0, Math.round((officialPct / 100) * held) - present);
     }
 
-    if (importedSubjects && importedSubjects.length > 0) {
-      setSubjects(importedSubjects);
-      try {
-        localStorage.setItem("attendx_subjects", JSON.stringify(importedSubjects));
-      } catch (e) {
-        console.error(e);
-      }
+    // ERP is the authoritative ground truth: reset any temporary manual markings for today
+    const baseSubjects = importedSubjects && importedSubjects.length > 0 ? importedSubjects : subjects;
+    const cleanedSubjects = baseSubjects.map((s) => ({
+      ...s,
+      todayHeld: 0,
+      todayPresent: 0,
+    }));
+
+    setSubjects(cleanedSubjects);
+    try {
+      localStorage.setItem("attendx_subjects", JSON.stringify(cleanedSubjects));
+    } catch (e) {
+      console.error(e);
     }
 
     const updated = {
       totalHeld: held,
       academicPresent: present,
-      thursdayHeld: metrics?.thursdayHeld ?? 8,
-      thursdayPresent: metrics?.thursdayPresent ?? 0,
+      thursdayHeld: 0, // Reset today's manual increment: ERP provides the full official total
+      thursdayPresent: 0,
       targetPercentage: metrics?.targetPercentage ?? 75,
       concessionBuffer: finalBuffer,
       officialPercentage: officialPct,
-      custom_subjects: importedSubjects || subjects,
+      custom_subjects: cleanedSubjects,
     };
     handleSaveSettings(updated);
   };
@@ -373,8 +379,8 @@ export default function Home() {
           onUpdateTarget={handleUpdateTarget}
         />
 
-        {/* MT2 Working Days & Exam Horizon */}
-        <MT2CalendarView metrics={metrics} />
+        {/* Datewise Attendance Calendar & What-If Schedule Forecast */}
+        <AttendanceCalendarView metrics={metrics} subjects={subjects} />
       </main>
 
       <footer className="w-full border-t border-zinc-900 py-5 text-center text-xs text-zinc-500 bg-[#09090b]">
