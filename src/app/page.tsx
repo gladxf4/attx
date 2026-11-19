@@ -222,7 +222,7 @@ export default function Home() {
       />
 
       <main className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 sm:py-8 space-y-4">
-        <AttendanceHero metrics={metrics} />
+        <AttendanceHero metrics={metrics} onOpenSync={() => setIsSyncOpen(true)} />
         <BunkCalculatorCard metrics={metrics} />
         <MT2CalendarView metrics={metrics} />
       </main>

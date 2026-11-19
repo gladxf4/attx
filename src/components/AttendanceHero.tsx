@@ -1,16 +1,35 @@
 "use client";
 
 import React from "react";
-import { ShieldCheck, AlertTriangle } from "lucide-react";
+import { ShieldCheck, AlertTriangle, Zap, ArrowRight } from "lucide-react";
 import { AttendanceMetrics } from "@/lib/types";
 
 interface AttendanceHeroProps {
   metrics: AttendanceMetrics;
+  onOpenSync?: () => void;
 }
 
-export const AttendanceHero: React.FC<AttendanceHeroProps> = ({ metrics }) => {
+export const AttendanceHero: React.FC<AttendanceHeroProps> = ({ metrics, onOpenSync }) => {
   return (
     <div className="clean-card p-5 sm:p-6">
+      {metrics.wednesdayHeld === 0 && (
+        <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+          <div className="flex items-center space-x-2 text-xs text-amber-300">
+            <Zap className="h-4 w-4 text-amber-400 fill-amber-400 shrink-0" />
+            <span>Your account attendance is not configured yet. Sync from college ERP to load your live numbers.</span>
+          </div>
+          {onOpenSync && (
+            <button
+              onClick={onOpenSync}
+              className="px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs flex items-center space-x-1 shrink-0 transition"
+            >
+              <span>Sync from ERP</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-zinc-800">
         <div>
           <div className="flex items-center space-x-2 mb-2">
