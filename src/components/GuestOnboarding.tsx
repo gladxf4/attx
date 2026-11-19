@@ -16,11 +16,13 @@ interface GuestOnboardingProps {
     officialPercentage?: number;
   }) => void;
   onLoginSuccess: (token: string, user: UserProfile) => void;
+  onOpenFeedback?: () => void;
 }
 
 export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
   onCompleteGuest,
   onLoginSuccess,
+  onOpenFeedback,
 }) => {
   const [mode, setMode] = useState<"guest" | "auth">("guest");
   const [authTab, setAuthTab] = useState<"login" | "register">("login");
@@ -466,6 +468,19 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
             </form>
           )}
         </div>
+
+        {onOpenFeedback && (
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={onOpenFeedback}
+              className="text-[11px] text-zinc-500 hover:text-zinc-300 transition inline-flex items-center space-x-1"
+            >
+              <HelpCircle className="h-3 w-3" />
+              <span>Report bug / Send feedback</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

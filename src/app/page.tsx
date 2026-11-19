@@ -8,6 +8,7 @@ import { MT2CalendarView } from "@/components/MT2CalendarView";
 import { EditBaselineModal } from "@/components/EditBaselineModal";
 import { SubjectAuditModal } from "@/components/SubjectAuditModal";
 import { ERPSyncModal } from "@/components/ERPSyncModal";
+import { FeedbackModal } from "@/components/FeedbackModal";
 import { GuestOnboarding } from "@/components/GuestOnboarding";
 import { UserProfile, AttendanceMetrics } from "@/lib/types";
 
@@ -20,6 +21,7 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSubjectsOpen, setIsSubjectsOpen] = useState(false);
   const [isSyncOpen, setIsSyncOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -192,10 +194,19 @@ export default function Home() {
 
   if (!hasData || !metrics) {
     return (
-      <GuestOnboarding
-        onCompleteGuest={handleCompleteGuest}
-        onLoginSuccess={handleLoginSuccess}
-      />
+      <>
+        <GuestOnboarding
+          onCompleteGuest={handleCompleteGuest}
+          onLoginSuccess={handleLoginSuccess}
+          onOpenFeedback={() => setIsFeedbackOpen(true)}
+        />
+        <FeedbackModal
+          isOpen={isFeedbackOpen}
+          onClose={() => setIsFeedbackOpen(false)}
+          defaultContact={user?.username}
+          attendancePct={undefined}
+        />
+      </>
     );
   }
 
@@ -206,6 +217,7 @@ export default function Home() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenSubjects={() => setIsSubjectsOpen(true)}
         onOpenSync={() => setIsSyncOpen(true)}
+        onOpenFeedback={() => setIsFeedbackOpen(true)}
         onReset={handleReset}
       />
 
@@ -217,7 +229,16 @@ export default function Home() {
 
       <footer className="w-full border-t border-zinc-900 py-4 text-center text-xs text-zinc-500">
         <div className="mx-auto max-w-4xl px-4 flex items-center justify-between">
-          <span>AttendX</span>
+          <div className="flex items-center space-x-3">
+            <span>AttendX</span>
+            <span>•</span>
+            <button
+              onClick={() => setIsFeedbackOpen(true)}
+              className="text-zinc-500 hover:text-zinc-300 transition"
+            >
+              Report Bug / Feedback
+            </button>
+          </div>
           <button
             onClick={handleReset}
             className="text-zinc-500 hover:text-zinc-300 transition"
@@ -244,6 +265,14 @@ export default function Home() {
         isOpen={isSyncOpen}
         onClose={() => setIsSyncOpen(false)}
         onImportNumbers={handleImportFromERP}
+        defaultAdmissionNo={user?.username}
+      />
+
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+        defaultContact={user?.username}
+        attendancePct={metrics?.currentPercentage}
       />
     </div>
   );
