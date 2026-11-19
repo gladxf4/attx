@@ -27,8 +27,8 @@ export interface AttendanceMetrics {
   // Cumulative current status (including Today)
   currentTotalHeld: number;
   currentTotalPresent: number;
-  currentPercentage: number; // Higher % (used by college)
-  rawPercentage: number; // Lower % (raw academic table)
+  currentPercentage: number; // Official % (shown at bottom of ERP page, used for exam eligibility)
+  rawPercentage: number; // Raw table % (calculated from subject lectures row)
   concessionBuffer: number;
 
   // Target & Bunking Metrics

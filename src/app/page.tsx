@@ -165,14 +165,19 @@ export default function Home() {
     }
   };
 
-  const handleImportFromERP = (held: number, present: number, buffer: number = 16) => {
+  const handleImportFromERP = (held: number, present: number, buffer: number = 0, officialPct?: number) => {
+    let finalBuffer = buffer;
+    if (officialPct !== undefined && officialPct > 0 && held > 0) {
+      finalBuffer = Math.max(0, Math.round((officialPct / 100) * held) - present);
+    }
     const updated = {
       totalHeld: held,
       academicPresent: present,
       thursdayHeld: metrics?.thursdayHeld ?? 8,
       thursdayPresent: metrics?.thursdayPresent ?? 0,
       targetPercentage: metrics?.targetPercentage ?? 75,
-      concessionBuffer: buffer,
+      concessionBuffer: finalBuffer,
+      officialPercentage: officialPct,
     };
     handleSaveSettings(updated);
   };

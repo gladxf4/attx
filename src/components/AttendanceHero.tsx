@@ -40,8 +40,8 @@ export const AttendanceHero: React.FC<AttendanceHeroProps> = ({ metrics }) => {
               {metrics.currentPercentage}%
             </span>
             <div className="flex flex-col">
-              <span className="text-xs text-zinc-300 font-medium">Official Attendance</span>
-              <span className="text-[11px] text-zinc-500 font-mono">Raw academic: {metrics.rawPercentage}%</span>
+              <span className="text-xs text-zinc-300 font-medium">Official Attendance (Bottom of ERP)</span>
+              <span className="text-[11px] text-zinc-500 font-mono">Subject table raw: {metrics.rawPercentage}%</span>
             </div>
           </div>
         </div>
@@ -63,7 +63,7 @@ export const AttendanceHero: React.FC<AttendanceHeroProps> = ({ metrics }) => {
           "{metrics.goofyQuote}"
         </p>
         <span className="text-[11px] text-zinc-500 shrink-0">
-          College uses official higher % for exam eligibility
+          College considers official percentage at bottom of ERP page for eligibility
         </span>
       </div>
     </div>

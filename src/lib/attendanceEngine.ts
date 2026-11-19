@@ -16,6 +16,67 @@ export const CALENDAR_DAYS_UNTIL_MT2: CalendarDayInfo[] = [
   { dateStr: "30 Nov", dayName: "Monday", isWeekend: false, isHoliday: false, isExamDay: true, holidayReason: "MT2 Starts", classesScheduled: 0 },
 ];
 
+export interface DynamicBaselineInfo {
+  anchorDateStr: string;
+  anchorHeldAIML: number;
+  anchorPresentAIML: number;
+  anchorOfficialPctAIML: number;
+  currentDateStr: string;
+  yesterdayDateStr: string;
+  expectedBaselineHeldAIML: number;
+  erpNoticeText: string;
+}
+
+export function getDynamicBaselineInfo(currentDate: Date = new Date()): DynamicBaselineInfo {
+  // Anchored on Wed 18 Nov 2026
+  const now = new Date(currentDate.getTime());
+
+  // Daily schedule map for 2026 odd semester
+  const scheduleMap: Record<string, number> = {
+    "2026-11-19": 8, // Thu
+    "2026-11-20": 8, // Fri
+    "2026-11-21": 0, // Sat (Weekend)
+    "2026-11-22": 0, // Sun (Weekend)
+    "2026-11-23": 8, // Mon
+    "2026-11-24": 0, // Tue (Holiday)
+    "2026-11-25": 8, // Wed
+    "2026-11-26": 8, // Thu
+    "2026-11-27": 8, // Fri
+    "2026-11-28": 0, // Sat (Weekend)
+    "2026-11-29": 0, // Sun (Weekend)
+    "2026-11-30": 0, // Mon (MT2 Starts)
+  };
+
+  // Determine yesterday/last working day
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  const yesterdayStr = `${dayNames[yesterday.getDay()]}, ${yesterday.getDate()} ${monthNames[yesterday.getMonth()]}`;
+  const currentStr = `${dayNames[now.getDay()]}, ${now.getDate()} ${monthNames[now.getMonth()]}`;
+
+  // Calculate accumulated lectures held up to yesterday
+  let accumulatedAIMLHeld = 421;
+  const runner = new Date(2026, 10, 19);
+  while (runner < now && runner.getDate() !== now.getDate()) {
+    const key = `2026-${String(runner.getMonth() + 1).padStart(2, "0")}-${String(runner.getDate()).padStart(2, "0")}`;
+    accumulatedAIMLHeld += (scheduleMap[key] || 0);
+    runner.setDate(runner.getDate() + 1);
+  }
+
+  return {
+    anchorDateStr: "Wed, 18 Nov",
+    anchorHeldAIML: 421,
+    anchorPresentAIML: 316,
+    anchorOfficialPctAIML: 78.86,
+    currentDateStr: currentStr,
+    yesterdayDateStr: `Yesterday (${yesterdayStr})`,
+    expectedBaselineHeldAIML: accumulatedAIMLHeld,
+    erpNoticeText:
+      "The ERP portal only displays the latest recorded attendance, which may not yet include today’s classes (depending on individual faculty upload timing). Enter your baseline counts up to yesterday, then track today's periods separately below.",
+  };
+}
+
 export function getRelativeDateText(targetDateStr: string = "2026-11-18"): string {
   try {
     const today = new Date(2026, 10, 19); // 19 Nov 2026
@@ -59,13 +120,13 @@ export function calculateAttendanceMetrics(
   const currentAcademicPresent = presentWed + thursdayPresent;
   const currentEffectivePresent = currentAcademicPresent + effectiveBuffer;
 
-  // Lower % (Raw academic table on ERP)
+  // Raw academic table % on ERP (from Total row)
   const rawPercentage = currentTotalHeld > 0 ? (currentAcademicPresent / currentTotalHeld) * 100 : 0;
 
-  // Higher % (Official attendance considered by college)
+  // Official attendance % (shown at bottom of ERP page, considered for exam eligibility)
   const currentPercentage = currentTotalHeld > 0 ? (currentEffectivePresent / currentTotalHeld) * 100 : 0;
 
-  // Target calculations based on the higher % (since college considers higher %)
+  // Target calculations based on the official bottom % (since college considers this for eligibility)
   const targetFraction = targetPercentage / 100;
   let safeBunksRemaining = 0;
   let classesNeededFor75 = 0;

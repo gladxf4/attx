@@ -130,7 +130,7 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-medium text-zinc-300">
-                Official ERP % (Higher %)
+                Official Attendance % (Bottom of ERP page)
               </label>
               <span className="text-[10px] text-zinc-500">Optional</span>
             </div>
@@ -139,7 +139,7 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
               step="0.01"
               min="0"
               max="100"
-              placeholder="e.g. 79.01 (shown on ERP banner)"
+              placeholder="e.g. 79.01 (shown at bottom of ERP page)"
               value={officialPercentage}
               onChange={(e) => setOfficialPercentage(e.target.value)}
               className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm font-mono text-white focus:border-zinc-500 focus:outline-none"

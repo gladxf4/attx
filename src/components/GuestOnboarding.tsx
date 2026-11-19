@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowRight, Minus, Plus, AlertCircle, HelpCircle } from "lucide-react";
+import { ArrowRight, Minus, Plus, AlertCircle, HelpCircle, Pencil, Info } from "lucide-react";
 import { UserProfile } from "@/lib/types";
+import { getDynamicBaselineInfo } from "@/lib/attendanceEngine";
 
 interface GuestOnboardingProps {
   onCompleteGuest: (data: {
@@ -24,10 +25,19 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
   const [mode, setMode] = useState<"guest" | "auth">("guest");
   const [authTab, setAuthTab] = useState<"login" | "register">("login");
 
+  const baselineInfo = getDynamicBaselineInfo();
+
   // Baseline lecture inputs (starts empty in production)
   const [totalHeldInput, setTotalHeldInput] = useState<string>("");
   const [presentInput, setPresentInput] = useState<string>("");
   const [officialPctInput, setOfficialPctInput] = useState<string>("");
+
+  const handleLoadAIMLBenchmark = () => {
+    setTotalHeldInput(String(baselineInfo.anchorHeldAIML));
+    setPresentInput(String(baselineInfo.anchorPresentAIML));
+    setOfficialPctInput(String(baselineInfo.anchorOfficialPctAIML));
+    setAuthError(null);
+  };
 
   // Today's classes: default 8 held, 0 attended
   const [thursdayHeld, setThursdayHeld] = useState<number>(8);
@@ -181,11 +191,42 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
 
           {mode === "guest" ? (
             <form onSubmit={handleGuestSubmit} className="space-y-3.5">
+              {/* Notice on ERP Data Timing */}
+              <div className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1">
+                <div className="flex items-center space-x-1.5 text-zinc-300 font-medium text-xs">
+                  <Info className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                  <span>Notice on ERP Total Held & Attended</span>
+                </div>
+                <p className="text-[11px] text-zinc-400 leading-normal">
+                  {baselineInfo.erpNoticeText}
+                </p>
+              </div>
+
               {/* Baseline Section */}
               <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-zinc-200">Baseline Attendance (Yesterday)</span>
-                  <span className="text-[11px] text-zinc-500">Wed, 18 Nov</span>
+                  <div className="flex items-center space-x-1">
+                    <span className="font-medium text-zinc-200">Baseline Attendance</span>
+                    <span className="text-[11px] text-zinc-500">({baselineInfo.yesterdayDateStr})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLoadAIMLBenchmark}
+                    className="flex items-center space-x-1 text-[11px] text-zinc-400 hover:text-white transition px-2 py-0.5 rounded bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/80"
+                    title="Load AIML-3A baseline as of Wed 18 Nov (421 held / 316 present)"
+                  >
+                    <Pencil className="h-3 w-3 text-zinc-300" />
+                    <span>AIML-3A Default</span>
+                  </button>
+                </div>
+
+                <div className="text-[11px] text-zinc-400 bg-zinc-950/70 rounded p-2 border border-zinc-800/80 flex items-center justify-between">
+                  <div>
+                    <span className="text-zinc-300 font-medium">AIML-3A Benchmark:</span>{" "}
+                    <span className="font-mono text-zinc-200">421 held / 316 att.</span>{" "}
+                    <span className="text-[10px] text-zinc-500">(as of Wed 18 Nov)</span>
+                  </div>
+                  <span className="text-zinc-500 text-[10px]">Tap button to edit/apply</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -217,7 +258,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] text-zinc-400">Official ERP % (Higher %)</label>
+                    <label className="block text-[11px] text-zinc-400">Official Attendance % (Bottom of ERP page)</label>
                     <span className="text-[10px] text-zinc-500">Optional</span>
                   </div>
                   <input
@@ -225,13 +266,13 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
                     step="0.01"
                     min="0"
                     max="100"
-                    placeholder="e.g. 79.0 (as shown on ERP banner)"
+                    placeholder="e.g. 79.01 (shown at bottom of ERP page)"
                     value={officialPctInput}
                     onChange={(e) => setOfficialPctInput(e.target.value)}
                     className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
                   />
                   <p className="text-[10px] text-zinc-500 mt-1">
-                    Calibrates your official college attendance without exposing inner formulas.
+                    The consolidated percentage shown at the bottom of your ERP attendance page.
                   </p>
                 </div>
               </div>
@@ -386,11 +427,13 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-zinc-400 mb-0.5">Official ERP %</label>
+                    <label className="block text-[11px] text-zinc-400 mb-0.5">
+                      Official Attendance % (Bottom of ERP page)
+                    </label>
                     <input
                       type="number"
                       step="0.01"
-                      placeholder="e.g. 79.0"
+                      placeholder="e.g. 79.01 (shown at bottom of ERP page)"
                       value={officialPctInput}
                       onChange={(e) => setOfficialPctInput(e.target.value)}
                       className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
