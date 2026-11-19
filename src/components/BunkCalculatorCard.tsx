@@ -9,7 +9,6 @@ import {
   Minus,
   Plus,
   TrendingUp,
-  Sparkles,
   Target,
   ArrowRight,
   Info
@@ -158,9 +157,9 @@ export const BunkCalculatorCard: React.FC<BunkCalculatorCardProps> = ({
   }
 
   return (
-    <div className="clean-card p-5 sm:p-6 space-y-6 border border-zinc-800/80 bg-zinc-950/70 shadow-lg">
+    <div className="apple-card p-6 sm:p-7 space-y-6">
       {/* Header & Mode Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/[0.06] pb-4">
         <div className="flex items-center space-x-2.5">
           <div className="h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center">
             {mode === "bunk" ? (

@@ -104,19 +104,19 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
   });
 
   return (
-    <div className="clean-card p-4 sm:p-5 border border-zinc-800 bg-zinc-950/80 space-y-4">
+    <div className="apple-card p-5 sm:p-6 space-y-5">
       {/* Header & Capacity Bar */}
       <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
           <div>
             <h3 className="text-sm font-semibold text-white flex items-center space-x-2">
-              <span>Today's Period Tracker</span>
-              <span className="text-[10px] font-mono font-normal text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full">
+              <span>Today's Period Marking</span>
+              <span className="text-[10px] font-mono font-normal text-zinc-400 bg-zinc-900 border border-white/[0.08] px-2 py-0.5 rounded-full">
                 Thu, 19 Nov
               </span>
             </h3>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Log today's attended periods before professors submit them on ERP.
+              Mark today's attended periods. These unconfirmed marks are automatically superseded upon next ERP sync.
             </p>
           </div>
 
@@ -126,16 +126,16 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
               className="text-[11px] text-zinc-400 hover:text-rose-400 flex items-center space-x-1 transition self-start sm:self-auto"
             >
               <RotateCcw className="h-3 w-3" />
-              <span>Clear Today</span>
+              <span>Reset Today</span>
             </button>
           )}
         </div>
 
         {/* 8-Period Capacity Meter */}
-        <div className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-2">
+        <div className="p-3.5 bg-zinc-900/60 rounded-xl border border-white/[0.08] space-y-2.5">
           <div className="flex items-center justify-between text-xs">
             <span className="font-medium text-zinc-200">
-              {totalHeldToday} of 8 Periods Logged
+              {totalHeldToday} of 8 Periods Marked
             </span>
             <div className="flex items-center space-x-3 text-[11px]">
               <span className="text-emerald-400 font-medium">{totalPresentToday} Attended</span>

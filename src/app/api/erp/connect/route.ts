@@ -436,9 +436,16 @@ export async function POST(req: Request) {
       },
     });
   } catch (error: any) {
-    console.error("Direct ERP connect error:", error);
+    console.error("Direct ERP connect error:", error?.message || error);
+    const safeError =
+      error?.message &&
+      !error.message.includes("http") &&
+      !error.message.includes("<html>") &&
+      !error.message.includes("fetch failed")
+        ? error.message
+        : "Failed to communicate with college ERP. Please verify your admission number and password.";
     return NextResponse.json(
-      { error: error.message || "Failed to communicate with college ERP." },
+      { error: safeError },
       { status: 500 }
     );
   }

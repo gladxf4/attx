@@ -33,6 +33,37 @@ export function getRelativeDateText(targetDateStr: string = "2026-11-18"): strin
   }
 }
 
+export interface DynamicMT2Horizon {
+  remainingWorkingDaysCount: number;
+  upcomingDates: { dateStr: string; dayNumber: number; dayName: string; dayShort: string; classesScheduled: number }[];
+  totalLecturesRemaining: number;
+}
+
+export function getDynamicMT2Horizon(currentDate: Date = new Date()): DynamicMT2Horizon {
+  const masterWorkingSchedule = [
+    { dateStr: "2026-11-20", dayNumber: 20, dayName: "Friday", dayShort: "Fri", classesScheduled: 8 },
+    { dateStr: "2026-11-23", dayNumber: 23, dayName: "Monday", dayShort: "Mon", classesScheduled: 8 },
+    { dateStr: "2026-11-25", dayNumber: 25, dayName: "Wednesday", dayShort: "Wed", classesScheduled: 8 },
+    { dateStr: "2026-11-26", dayNumber: 26, dayName: "Thursday", dayShort: "Thu", classesScheduled: 8 },
+    { dateStr: "2026-11-27", dayNumber: 27, dayName: "Friday", dayShort: "Fri", classesScheduled: 8 },
+  ];
+
+  let dayNum = 19;
+  if (currentDate.getFullYear() === 2026 && currentDate.getMonth() === 10) {
+    dayNum = currentDate.getDate();
+  }
+
+  const upcoming = masterWorkingSchedule.filter((d) => d.dayNumber > dayNum);
+  const remainingWorkingDaysCount = upcoming.length;
+  const totalLecturesRemaining = remainingWorkingDaysCount * 8;
+
+  return {
+    remainingWorkingDaysCount,
+    upcomingDates: upcoming,
+    totalLecturesRemaining,
+  };
+}
+
 export function getDynamicBaselineInfo() {
   return {
     anchorDateStr: "Wed, 18 Nov",
@@ -99,8 +130,8 @@ export function calculateAttendanceMetrics(
   const safeDaysBunkable = Math.floor(safeBunksRemaining / 8);
 
   const remainingToday = Math.max(0, 8 - clampedTodayHeld);
-  const fullWorkingDaysUntilMT2 = 5; // Fri 20, Mon 23, Wed 25, Thu 26, Fri 27 (Nov 24 holiday, Nov 30 exam)
-  const totalLecturesUntilMT2 = remainingToday + fullWorkingDaysUntilMT2 * 8;
+  const { remainingWorkingDaysCount, totalLecturesRemaining } = getDynamicMT2Horizon();
+  const totalLecturesUntilMT2 = remainingToday + totalLecturesRemaining;
 
   const finalTotalLectures = currentTotalHeld + totalLecturesUntilMT2;
   const requiredEffectivePresent = Math.ceil(targetFraction * finalTotalLectures);
@@ -135,7 +166,7 @@ export function calculateAttendanceMetrics(
     safeDaysBunkable,
     classesNeededFor75,
 
-    workingDaysUntilMT2: fullWorkingDaysUntilMT2 + (remainingToday > 0 ? 1 : 0),
+    workingDaysUntilMT2: remainingWorkingDaysCount + (remainingToday > 0 ? 1 : 0),
     totalLecturesUntilMT2,
     minClassesToAttendBeforeMT2,
 

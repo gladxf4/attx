@@ -26,6 +26,15 @@ export default function Home() {
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   const periodTrackerRef = useRef<HTMLDivElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const [activeCalendarDate, setActiveCalendarDate] = useState<string | null>(null);
+
+  const handleOpenTodayDetail = () => {
+    setActiveCalendarDate("2026-11-19");
+    if (calendarRef.current) {
+      calendarRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -339,25 +348,25 @@ export default function Home() {
   const hasERP = metrics.wednesdayHeld > 0 || (user?.totalHeld ?? 0) > 0;
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col justify-between selection:bg-emerald-500/20 selection:text-emerald-300">
+    <div className="apple-canvas min-h-screen text-zinc-100 flex flex-col justify-between selection:bg-white/10 selection:text-white">
       <Navbar
         user={user}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenSubjects={() => setIsSubjectsOpen(true)}
         onOpenSync={() => setIsSyncOpen(true)}
         onOpenFeedback={() => setIsFeedbackOpen(true)}
-        onOpenPeriodTracker={scrollToPeriodTracker}
+        onOpenPeriodTracker={handleOpenTodayDetail}
         onReset={handleReset}
         subjectCount={subjects.length}
         hasERPInitialized={hasERP}
       />
 
-      <main className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <main className="mx-auto w-full max-w-4xl px-3.5 sm:px-6 py-4 sm:py-6 space-y-6">
         {/* Attendance Hero with Target Threshold Selector and Clean Visuals */}
         <AttendanceHero
           metrics={metrics}
           onOpenSync={() => setIsSyncOpen(true)}
-          onOpenPeriodTracker={scrollToPeriodTracker}
+          onOpenTodayDetailModal={handleOpenTodayDetail}
           onUpdateTarget={handleUpdateTarget}
           hasERPInitialized={hasERP}
         />
@@ -380,26 +389,33 @@ export default function Home() {
         />
 
         {/* Datewise Attendance Calendar & What-If Schedule Forecast */}
-        <AttendanceCalendarView metrics={metrics} subjects={subjects} />
+        <div ref={calendarRef} id="attendance-calendar-view">
+          <AttendanceCalendarView
+            metrics={metrics}
+            subjects={subjects}
+            activeModalDateStr={activeCalendarDate}
+            onCloseModal={() => setActiveCalendarDate(null)}
+          />
+        </div>
       </main>
 
-      <footer className="w-full border-t border-zinc-900 py-5 text-center text-xs text-zinc-500 bg-[#09090b]">
+      <footer className="w-full border-t border-white/[0.06] py-6 text-center text-xs text-zinc-500 bg-transparent">
         <div className="mx-auto max-w-4xl px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
-            <span className="font-semibold text-zinc-400">AttendX</span>
+            <span className="font-semibold text-zinc-300">AttendX</span>
             <span>•</span>
             <button
               onClick={() => setIsFeedbackOpen(true)}
               className="text-zinc-500 hover:text-zinc-300 transition"
             >
-              Report Bug / Feedback
+              Feedback
             </button>
           </div>
           <button
             onClick={handleReset}
             className="text-zinc-500 hover:text-zinc-300 transition text-[11px]"
           >
-            Clear Data / Switch Account
+            Clear Local Data
           </button>
         </div>
       </footer>
