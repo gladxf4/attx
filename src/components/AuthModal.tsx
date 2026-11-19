@@ -15,7 +15,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [branch, setBranch] = useState("AIML-3A");
+  const [branch, setBranch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -24,14 +24,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (tab === "register" && !name.trim()) {
+      setError("Full Name is mandatory.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const endpoint = tab === "login" ? "/api/auth/login" : "/api/auth/register";
       const payload =
         tab === "login"
-          ? { username, password }
-          : { username, password, name, branch };
+          ? { username: username.trim(), password }
+          : { username: username.trim(), password, name: name.trim(), branch: branch.trim() };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -106,7 +112,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. 2024B0131000 or email"
+                placeholder="2025B15..."
                 className="w-full rounded-lg border border-slate-700 bg-slate-900/80 pl-9 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
               />
             </div>
@@ -114,7 +120,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Password
+              Password *
             </label>
             <div className="relative">
               <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
@@ -133,26 +139,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
             <>
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Your Name (Optional)
+                  Full Name *
                 </label>
                 <input
                   type="text"
+                  required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Rahul Sharma"
+                  placeholder="Enter full name"
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Branch / Year
+                  Branch / Year (Optional)
                 </label>
                 <input
                   type="text"
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
-                  placeholder="e.g. AIML-3A, CSE-2, ECE-3"
+                  placeholder="e.g. CSE-2, ECE-3"
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
                 />
               </div>

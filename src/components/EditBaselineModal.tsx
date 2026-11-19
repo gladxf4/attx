@@ -15,6 +15,8 @@ interface EditBaselineModalProps {
     thursdayHeld: number;
     thursdayPresent: number;
     targetPercentage: number;
+    concessionBuffer?: number;
+    officialPercentage?: number;
   }) => Promise<void>;
 }
 
@@ -26,6 +28,9 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
 }) => {
   const [totalHeld, setTotalHeld] = useState(metrics.wednesdayHeld);
   const [academicPresent, setAcademicPresent] = useState(metrics.wednesdayPresent);
+  const [officialPercentage, setOfficialPercentage] = useState<number | string>(
+    metrics.concessionBuffer > 0 ? metrics.wednesdayPercentage : ""
+  );
   const [thursdayHeld, setThursdayHeld] = useState(metrics.thursdayHeld);
   const [thursdayPresent, setThursdayPresent] = useState(metrics.thursdayPresent);
   const [targetPercentage, setTargetPercentage] = useState(metrics.targetPercentage);
@@ -50,12 +55,23 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
     e.preventDefault();
     setIsSaving(true);
     try {
+      const held = Math.max(1, Number(totalHeld));
+      const pres = Math.max(0, Math.min(held, Number(academicPresent)));
+      let buffer = metrics.concessionBuffer;
+
+      if (officialPercentage !== "" && Number(officialPercentage) > 0) {
+        const targetOfficial = Math.round((Number(officialPercentage) / 100.0) * held);
+        buffer = Math.max(0, targetOfficial - pres);
+      }
+
       await onSave({
-        totalHeld: Math.max(1, Number(totalHeld)),
-        academicPresent: Math.max(0, Math.min(Number(totalHeld), Number(academicPresent))),
+        totalHeld: held,
+        academicPresent: pres,
         thursdayHeld,
         thursdayPresent,
         targetPercentage: Math.max(50, Math.min(100, Number(targetPercentage))),
+        concessionBuffer: buffer,
+        officialPercentage: officialPercentage !== "" ? Number(officialPercentage) : undefined,
       });
       onClose();
     } catch (err) {
@@ -109,6 +125,25 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
                 className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm font-mono text-white focus:border-zinc-500 focus:outline-none"
               />
             </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-zinc-300">
+                Official ERP % (Higher %)
+              </label>
+              <span className="text-[10px] text-zinc-500">Optional</span>
+            </div>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              placeholder="e.g. 79.01 (shown on ERP banner)"
+              value={officialPercentage}
+              onChange={(e) => setOfficialPercentage(e.target.value)}
+              className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm font-mono text-white focus:border-zinc-500 focus:outline-none"
+            />
           </div>
 
           {/* Steppers for Thursday Classes */}

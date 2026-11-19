@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "AttendX Web — Bunk Smart, Stay Eligible",
-  description: "Next-gen attendance prediction, safe bunk calculator, and MT2 eligibility forecast for ABES students.",
+  description: "Next-gen attendance prediction, safe bunk calculator, and MT2 eligibility forecast.",
   icons: {
     icon: "/icon.png",
   },

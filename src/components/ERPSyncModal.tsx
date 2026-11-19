@@ -17,9 +17,9 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
   const [tab, setTab] = useState<"mobile" | "paste" | "script">("mobile");
 
   // Mobile 3-number match
-  const [heldInput, setHeldInput] = useState<string>("424");
-  const [presentInput, setPresentInput] = useState<string>("319");
-  const [officialPctInput, setOfficialPctInput] = useState<string>("79.01");
+  const [heldInput, setHeldInput] = useState<string>("");
+  const [presentInput, setPresentInput] = useState<string>("");
+  const [officialPctInput, setOfficialPctInput] = useState<string>("");
 
   // Paste raw text
   const [rawText, setRawText] = useState<string>("");
@@ -36,7 +36,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
   const offPctNum = Number(officialPctInput) || 0;
 
   const rawPct = heldNum > 0 ? (presNum / heldNum) * 100 : 0;
-  const effectivePres = Math.round((offPctNum / 100.0) * heldNum);
+  const effectivePres = offPctNum > 0 ? Math.round((offPctNum / 100.0) * heldNum) : presNum;
   const detectedBuffer = Math.max(0, effectivePres - presNum);
   const higherPct = heldNum > 0 ? ((presNum + detectedBuffer) / heldNum) * 100 : 0;
 
@@ -58,7 +58,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
       if (totalMatch) {
         const h = parseInt(totalMatch[1]);
         const p = parseInt(totalMatch[2]);
-        const eff = parsedPct ? Math.round((parsedPct / 100.0) * h) : p + 16;
+        const eff = parsedPct ? Math.round((parsedPct / 100.0) * h) : p;
         const buf = Math.max(0, eff - p);
         onImportNumbers(h, p, buf);
         onClose();
@@ -66,7 +66,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
       }
       throw new Error("Could not find Total row in pasted text.");
     } catch (e: any) {
-      setPasteError("Could not auto-detect attendance. Try using the Quick Match tab instead.");
+      setPasteError("Could not auto-detect attendance. Try using the 3 Numbers tab instead.");
     }
   };
 
@@ -83,7 +83,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
           <X className="h-4 w-4" />
         </button>
 
-        <h3 className="text-sm font-semibold text-white mb-1">Sync from ABES ERP</h3>
+        <h3 className="text-sm font-semibold text-white mb-1">Sync from College ERP</h3>
         <p className="text-xs text-zinc-400 mb-4">
           Match your official numbers without needing a laptop console.
         </p>
@@ -122,32 +122,32 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
         {tab === "mobile" && (
           <div className="space-y-3.5">
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Enter the 3 numbers displayed on your ERP Attendance screen:
+              Enter the numbers displayed on your ERP Attendance screen:
             </p>
 
             <div className="grid grid-cols-2 gap-2.5">
               <div>
                 <label className="block text-[11px] text-zinc-400 mb-0.5">
-                  1. Total Held (bottom row)
+                  1. Total Held
                 </label>
                 <input
                   type="number"
                   value={heldInput}
                   onChange={(e) => setHeldInput(e.target.value)}
-                  placeholder="e.g. 424"
+                  placeholder="e.g. 420"
                   className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
                 />
               </div>
 
               <div>
                 <label className="block text-[11px] text-zinc-400 mb-0.5">
-                  2. Present (bottom row)
+                  2. Present
                 </label>
                 <input
                   type="number"
                   value={presentInput}
                   onChange={(e) => setPresentInput(e.target.value)}
-                  placeholder="e.g. 319"
+                  placeholder="e.g. 315"
                   className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
                 />
               </div>
@@ -155,37 +155,40 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
 
             <div>
               <label className="block text-[11px] text-zinc-400 mb-0.5">
-                3. Official % Shown (top of page)
+                3. Official % (shown on ERP banner)
               </label>
               <input
                 type="number"
                 step="0.01"
                 value={officialPctInput}
                 onChange={(e) => setOfficialPctInput(e.target.value)}
-                placeholder="e.g. 79.01"
+                placeholder="e.g. 79.0"
                 className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
               />
             </div>
 
             {/* Live Calculation Preview */}
-            <div className="p-3 bg-zinc-900 rounded-md border border-zinc-800 text-xs space-y-1.5">
-              <div className="flex items-center justify-between text-zinc-300">
-                <span>Raw Academic (Lower %):</span>
-                <span className="font-mono text-zinc-400">{rawPct.toFixed(2)}%</span>
+            {heldNum > 0 && presNum >= 0 && (
+              <div className="p-3 bg-zinc-900 rounded-md border border-zinc-800 text-xs space-y-1.5">
+                <div className="flex items-center justify-between text-zinc-300">
+                  <span>Raw Academic %:</span>
+                  <span className="font-mono text-zinc-400">{rawPct.toFixed(2)}%</span>
+                </div>
+                <div className="flex items-center justify-between text-zinc-300">
+                  <span>Official Attendance %:</span>
+                  <span className="font-mono font-bold text-white">{higherPct.toFixed(2)}%</span>
+                </div>
+                <div className="flex items-center justify-between text-zinc-400 text-[11px] pt-1 border-t border-zinc-800/80">
+                  <span>Status:</span>
+                  <span className="font-mono text-emerald-400 font-medium">Calibrated with Official ERP</span>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-zinc-300">
-                <span>Official College (Higher %):</span>
-                <span className="font-mono font-bold text-white">{higherPct.toFixed(2)}%</span>
-              </div>
-              <div className="flex items-center justify-between text-zinc-400 text-[11px] pt-1 border-t border-zinc-800/80">
-                <span>Detected Concession Buffer:</span>
-                <span className="font-mono text-emerald-400 font-semibold">+{detectedBuffer} classes</span>
-              </div>
-            </div>
+            )}
 
             <button
               onClick={handleApplyMobileMatch}
-              className="w-full flex items-center justify-center space-x-1.5 rounded-lg bg-white text-zinc-950 font-medium py-2 text-xs hover:bg-zinc-200 transition"
+              disabled={heldNum <= 0 || presNum < 0}
+              className="w-full flex items-center justify-center space-x-1.5 rounded-lg bg-white text-zinc-950 font-medium py-2 text-xs hover:bg-zinc-200 transition disabled:opacity-40"
             >
               <span>Sync Numbers</span>
               <ArrowRight className="h-3.5 w-3.5" />

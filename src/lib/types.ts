@@ -6,6 +6,7 @@ export interface UserProfile {
   sem?: string;
   totalHeld: number; // Previous day baseline
   academicPresent: number; // Previous day baseline
+  officialPercentage?: number; // Official ERP % (e.g. 79.01)
   thursdayHeld: number; // Today
   thursdayPresent: number; // Today
   targetPercentage: number;

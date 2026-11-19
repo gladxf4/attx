@@ -28,7 +28,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <img src="/logo.png" alt="AttendX" className="h-full w-full object-contain" />
           </div>
           <span className="font-semibold text-sm text-white tracking-tight">AttendX</span>
-          <span className="text-[11px] text-zinc-500">ABES</span>
         </div>
 
         {/* Controls */}

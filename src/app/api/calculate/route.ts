@@ -7,10 +7,11 @@ export async function POST(req: Request) {
     const {
       totalHeld = 421,
       academicPresent = 316,
+      officialPercentage,
       thursdayHeld = 8,
       thursdayPresent = 0,
       targetPercentage = 75,
-      concessionBuffer = 16,
+      concessionBuffer,
       simulateFutureClasses,
       simulateAttendedClasses,
     } = body;
@@ -21,7 +22,8 @@ export async function POST(req: Request) {
       Number(thursdayHeld),
       Number(thursdayPresent),
       Number(targetPercentage),
-      Number(concessionBuffer)
+      concessionBuffer !== undefined ? Number(concessionBuffer) : 0,
+      officialPercentage !== undefined && officialPercentage !== null ? Number(officialPercentage) : undefined
     );
 
     let simulation = null;

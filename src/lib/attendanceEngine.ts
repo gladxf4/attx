@@ -38,18 +38,26 @@ export function calculateAttendanceMetrics(
   thursdayHeld: number = 8,
   thursdayPresent: number = 0,
   targetPercentage: number = 75,
-  internalFactorBuffer: number = 16
+  internalFactorBuffer: number = 0,
+  officialBaselinePercentage?: number
 ): AttendanceMetrics {
   const relativeText = getRelativeDateText("2026-11-18");
 
-  // Wednesday baseline (higher %)
-  const effectiveWedPresent = presentWed + internalFactorBuffer;
+  // Calibrate buffer dynamically if official percentage is supplied
+  let effectiveBuffer = Math.max(0, internalFactorBuffer || 0);
+  if (officialBaselinePercentage !== undefined && officialBaselinePercentage > 0 && totalHeldWed > 0) {
+    const targetOfficialPresent = Math.round((officialBaselinePercentage / 100) * totalHeldWed);
+    effectiveBuffer = Math.max(0, targetOfficialPresent - presentWed);
+  }
+
+  // Wednesday baseline
+  const effectiveWedPresent = presentWed + effectiveBuffer;
   const wednesdayPercentage = totalHeldWed > 0 ? (effectiveWedPresent / totalHeldWed) * 100 : 0;
 
   // Cumulative current status (including today)
   const currentTotalHeld = totalHeldWed + thursdayHeld;
   const currentAcademicPresent = presentWed + thursdayPresent;
-  const currentEffectivePresent = currentAcademicPresent + internalFactorBuffer;
+  const currentEffectivePresent = currentAcademicPresent + effectiveBuffer;
 
   // Lower % (Raw academic table on ERP)
   const rawPercentage = currentTotalHeld > 0 ? (currentAcademicPresent / currentTotalHeld) * 100 : 0;
@@ -96,7 +104,7 @@ export function calculateAttendanceMetrics(
     currentTotalPresent: currentEffectivePresent,
     currentPercentage: Number(currentPercentage.toFixed(2)),
     rawPercentage: Number(rawPercentage.toFixed(2)),
-    concessionBuffer: internalFactorBuffer,
+    concessionBuffer: effectiveBuffer,
 
     targetPercentage,
     isEligibleForMT2: currentPercentage >= targetPercentage,

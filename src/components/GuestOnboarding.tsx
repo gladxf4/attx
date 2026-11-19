@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowRight, Minus, Plus, Lock, Unlock, AlertCircle } from "lucide-react";
+import { ArrowRight, Minus, Plus, AlertCircle, HelpCircle } from "lucide-react";
 import { UserProfile } from "@/lib/types";
 
 interface GuestOnboardingProps {
@@ -11,6 +11,8 @@ interface GuestOnboardingProps {
     thursdayHeld: number;
     thursdayPresent: number;
     targetPercentage: number;
+    concessionBuffer?: number;
+    officialPercentage?: number;
   }) => void;
   onLoginSuccess: (token: string, user: UserProfile) => void;
 }
@@ -22,15 +24,15 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
   const [mode, setMode] = useState<"guest" | "auth">("guest");
   const [authTab, setAuthTab] = useState<"login" | "register">("login");
 
-  // Locked preset state (Default: Sem 3 Wed 18 Nov baseline)
-  const [isPresetCustomized, setIsPresetCustomized] = useState(false);
-  const [totalHeld, setTotalHeld] = useState<number>(421);
-  const [academicPresent, setAcademicPresent] = useState<number>(316);
+  // Baseline lecture inputs (starts empty in production)
+  const [totalHeldInput, setTotalHeldInput] = useState<string>("");
+  const [presentInput, setPresentInput] = useState<string>("");
+  const [officialPctInput, setOfficialPctInput] = useState<string>("");
 
   // Today's classes: default 8 held, 0 attended
   const [thursdayHeld, setThursdayHeld] = useState<number>(8);
   const [thursdayPresent, setThursdayPresent] = useState<number>(0);
-  const [targetPercentage, setTargetPercentage] = useState<number>(75);
+  const [targetPercentage] = useState<number>(75);
 
   // Auth inputs
   const [username, setUsername] = useState("");
@@ -54,12 +56,34 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
 
   const handleGuestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const held = Number(totalHeldInput);
+    const pres = Number(presentInput);
+    const offPct = officialPctInput ? Number(officialPctInput) : undefined;
+
+    if (!held || held <= 0) {
+      setAuthError("Please enter your total lectures held.");
+      return;
+    }
+
+    if (pres === undefined || pres < 0 || pres > held) {
+      setAuthError("Please enter valid classes attended.");
+      return;
+    }
+
+    let calculatedBuffer = 0;
+    if (offPct !== undefined && offPct > 0) {
+      const targetOfficial = Math.round((offPct / 100.0) * held);
+      calculatedBuffer = Math.max(0, targetOfficial - pres);
+    }
+
     onCompleteGuest({
-      totalHeld: Math.max(1, Number(totalHeld)),
-      academicPresent: Math.max(0, Math.min(Number(totalHeld), Number(academicPresent))),
+      totalHeld: held,
+      academicPresent: pres,
       thursdayHeld,
       thursdayPresent,
-      targetPercentage: Math.max(50, Math.min(100, Number(targetPercentage))),
+      targetPercentage: 75,
+      concessionBuffer: calculatedBuffer,
+      officialPercentage: offPct,
     });
   };
 
@@ -68,7 +92,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
     setAuthError(null);
 
     if (authTab === "register" && !name.trim()) {
-      setAuthError("Full Name is required.");
+      setAuthError("Full Name is mandatory.");
       return;
     }
 
@@ -76,10 +100,21 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
 
     try {
       const endpoint = authTab === "login" ? "/api/auth/login" : "/api/auth/register";
+      const held = Number(totalHeldInput) || 0;
+      const pres = Number(presentInput) || 0;
+      const offPct = officialPctInput ? Number(officialPctInput) : undefined;
+
       const payload =
         authTab === "login"
           ? { username: username.trim(), password }
-          : { username: username.trim(), password, name: name.trim(), totalHeld, academicPresent };
+          : {
+              username: username.trim(),
+              password,
+              name: name.trim(),
+              totalHeld: held,
+              academicPresent: pres,
+              officialPercentage: offPct,
+            };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -108,10 +143,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
           <div className="h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center">
             <img src="/logo.png" alt="AttendX" className="h-full w-full object-contain" />
           </div>
-          <div>
-            <span className="font-semibold text-base text-white tracking-tight">AttendX</span>
-            <span className="text-xs text-zinc-500 ml-1.5 font-normal">ABES</span>
-          </div>
+          <span className="font-semibold text-base text-white tracking-tight">AttendX</span>
         </div>
 
         {/* Card */}
@@ -140,68 +172,75 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
             </button>
           </div>
 
+          {authError && (
+            <div className="flex items-center space-x-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg mb-3">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span>{authError}</span>
+            </div>
+          )}
+
           {mode === "guest" ? (
-            <form onSubmit={handleGuestSubmit} className="space-y-4">
-              {/* Baseline Section (Locked Preset by default) */}
-              <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800">
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <div className="flex items-center space-x-1.5 text-zinc-300 font-medium">
-                    {isPresetCustomized ? <Unlock className="h-3.5 w-3.5 text-amber-400" /> : <Lock className="h-3.5 w-3.5 text-zinc-500" />}
-                    <span>Baseline: Wed, 18 Nov (Yesterday)</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsPresetCustomized(!isPresetCustomized)}
-                    className="text-[11px] text-zinc-400 hover:text-white underline underline-offset-2"
-                  >
-                    {isPresetCustomized ? "Reset Preset" : "Change Batch"}
-                  </button>
+            <form onSubmit={handleGuestSubmit} className="space-y-3.5">
+              {/* Baseline Section */}
+              <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-zinc-200">Baseline Attendance (Yesterday)</span>
+                  <span className="text-[11px] text-zinc-500">Wed, 18 Nov</span>
                 </div>
 
-                {!isPresetCustomized ? (
-                  <div className="flex items-center justify-between text-xs font-mono text-zinc-400 pt-1">
-                    <span>Preset: Sem 3 Default</span>
-                    <span className="text-white font-medium">421 Held / 316 Attended</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-zinc-400 mb-1">Total Held *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      placeholder="e.g. 420"
+                      value={totalHeldInput}
+                      onChange={(e) => setTotalHeldInput(e.target.value)}
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                    />
                   </div>
-                ) : (
-                  <div className="space-y-2.5 pt-2">
-                    <p className="text-[11px] text-zinc-400 leading-normal">
-                      Enter your previous day's ERP total numbers (raw lower %).
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[11px] text-zinc-400 mb-0.5">Total Held</label>
-                        <input
-                          type="number"
-                          min="1"
-                          required
-                          value={totalHeld}
-                          onChange={(e) => setTotalHeld(Number(e.target.value))}
-                          className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-zinc-400 mb-0.5">Present</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max={totalHeld}
-                          required
-                          value={academicPresent}
-                          onChange={(e) => setAcademicPresent(Number(e.target.value))}
-                          className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none"
-                        />
-                      </div>
-                    </div>
+                  <div>
+                    <label className="block text-[11px] text-zinc-400 mb-1">Attended *</label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      placeholder="e.g. 315"
+                      value={presentInput}
+                      onChange={(e) => setPresentInput(e.target.value)}
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                    />
                   </div>
-                )}
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] text-zinc-400">Official ERP % (Higher %)</label>
+                    <span className="text-[10px] text-zinc-500">Optional</span>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder="e.g. 79.0 (as shown on ERP banner)"
+                    value={officialPctInput}
+                    onChange={(e) => setOfficialPctInput(e.target.value)}
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-zinc-500 mt-1">
+                    Calibrates your official college attendance without exposing inner formulas.
+                  </p>
+                </div>
               </div>
 
               {/* Today's Classes (Default: 8 held, 0 attended) */}
               <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium text-zinc-200">Today: Thu, 19 Nov</span>
-                  <span className="text-[11px] text-zinc-500">Max 8 lecs/day</span>
+                  <span className="text-[11px] text-zinc-500">8 periods/day</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5">
@@ -293,13 +332,6 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
                 </button>
               </div>
 
-              {authError && (
-                <div className="flex items-center space-x-1 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2 rounded">
-                  <AlertCircle className="h-3 w-3 shrink-0" />
-                  <span>{authError}</span>
-                </div>
-              )}
-
               <div>
                 <label className="block text-[11px] text-zinc-400 mb-0.5">
                   Admission No *
@@ -315,19 +347,56 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
               </div>
 
               {authTab === "register" && (
-                <div>
-                  <label className="block text-[11px] text-zinc-400 mb-0.5">
-                    Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter full name"
-                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-[11px] text-zinc-400 mb-0.5">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Enter full name"
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-0.5">Total Held</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 420"
+                        value={totalHeldInput}
+                        onChange={(e) => setTotalHeldInput(e.target.value)}
+                        className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-0.5">Attended</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 315"
+                        value={presentInput}
+                        onChange={(e) => setPresentInput(e.target.value)}
+                        className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-zinc-400 mb-0.5">Official ERP %</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="e.g. 79.0"
+                      value={officialPctInput}
+                      onChange={(e) => setOfficialPctInput(e.target.value)}
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                    />
+                  </div>
+                </>
               )}
 
               <div>

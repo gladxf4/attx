@@ -35,7 +35,7 @@ export async function GET(req: Request) {
       user.thursday_held,
       user.thursday_present,
       user.target_percentage || 75,
-      user.factor_buffer || 16
+      user.factor_buffer !== null && user.factor_buffer !== undefined ? Number(user.factor_buffer) : 0
     );
 
     return NextResponse.json({

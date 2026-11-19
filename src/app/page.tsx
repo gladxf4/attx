@@ -131,7 +131,7 @@ export default function Home() {
     concessionBuffer?: number;
   }) => {
     const token = localStorage.getItem("attendx_token");
-    const bufferVal = data.concessionBuffer !== undefined ? data.concessionBuffer : (metrics?.concessionBuffer || 16);
+    const bufferVal = data.concessionBuffer !== undefined ? data.concessionBuffer : (metrics?.concessionBuffer || 0);
 
     if (token && user) {
       const res = await fetch("/api/attendance", {
@@ -212,7 +212,7 @@ export default function Home() {
 
       <footer className="w-full border-t border-zinc-900 py-4 text-center text-xs text-zinc-500">
         <div className="mx-auto max-w-4xl px-4 flex items-center justify-between">
-          <span>AttendX • ABES</span>
+          <span>AttendX</span>
           <button
             onClick={handleReset}
             className="text-zinc-500 hover:text-zinc-300 transition"

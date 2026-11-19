@@ -5,7 +5,7 @@ import { hashPassword, createToken } from "@/lib/auth";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { username, password, name, branch, totalHeld, academicPresent } = body;
+    const { username, password, name, branch, totalHeld, academicPresent, officialPercentage, concessionBuffer } = body;
 
     if (!username?.trim() || !password || !name?.trim()) {
       return NextResponse.json(
@@ -31,8 +31,14 @@ export async function POST(req: Request) {
     }
 
     const hashedPassword = await hashPassword(password);
-    const initialHeld = totalHeld !== undefined ? Math.max(1, Number(totalHeld)) : 421;
-    const initialPresent = academicPresent !== undefined ? Math.max(0, Number(academicPresent)) : 316;
+    const initialHeld = totalHeld !== undefined && Number(totalHeld) > 0 ? Number(totalHeld) : 0;
+    const initialPresent = academicPresent !== undefined ? Math.max(0, Number(academicPresent)) : 0;
+
+    let initialBuffer = concessionBuffer !== undefined ? Number(concessionBuffer) : 0;
+    if (officialPercentage !== undefined && Number(officialPercentage) > 0 && initialHeld > 0) {
+      const targetOfficial = Math.round((Number(officialPercentage) / 100) * initialHeld);
+      initialBuffer = Math.max(0, targetOfficial - initialPresent);
+    }
 
     const inserted = await sql`
       INSERT INTO attendx_web_users (
@@ -49,12 +55,12 @@ export async function POST(req: Request) {
         ${cleanUsername},
         ${hashedPassword},
         ${cleanName},
-        ${branch?.trim() || "AIML-3A"},
+        ${branch?.trim() || null},
         ${initialHeld},
         ${initialPresent},
-        16,
-        3,
-        3
+        ${initialBuffer},
+        8,
+        0
       ) RETURNING id, username, name, branch, total_held, academic_present, thursday_held, thursday_present, target_percentage
     `;
 
