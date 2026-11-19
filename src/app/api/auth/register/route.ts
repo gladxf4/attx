@@ -7,26 +7,32 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { username, password, name, branch, totalHeld, academicPresent } = body;
 
-    if (!username || !password) {
-      return NextResponse.json({ error: "Username and password are required" }, { status: 400 });
+    if (!username?.trim() || !password || !name?.trim()) {
+      return NextResponse.json(
+        { error: "Admission Number, Full Name, and Password are all mandatory." },
+        { status: 400 }
+      );
     }
 
     if (password.length < 4) {
       return NextResponse.json({ error: "Password must be at least 4 characters" }, { status: 400 });
     }
 
+    const cleanUsername = username.trim();
+    const cleanName = name.trim();
+
     // Check if user already exists
     const existing = await sql`
-      SELECT id FROM attendx_web_users WHERE LOWER(username) = LOWER(${username.trim()}) LIMIT 1
+      SELECT id FROM attendx_web_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1
     `;
 
     if (existing.length > 0) {
-      return NextResponse.json({ error: "Username or Admission No already registered" }, { status: 409 });
+      return NextResponse.json({ error: "This Admission Number is already registered. Please sign in." }, { status: 409 });
     }
 
     const hashedPassword = await hashPassword(password);
-    const initialHeld = totalHeld !== undefined ? Number(totalHeld) : 421;
-    const initialPresent = academicPresent !== undefined ? Number(academicPresent) : 316;
+    const initialHeld = totalHeld !== undefined ? Math.max(1, Number(totalHeld)) : 421;
+    const initialPresent = academicPresent !== undefined ? Math.max(0, Number(academicPresent)) : 316;
 
     const inserted = await sql`
       INSERT INTO attendx_web_users (
@@ -40,10 +46,10 @@ export async function POST(req: Request) {
         thursday_held,
         thursday_present
       ) VALUES (
-        ${username.trim()},
+        ${cleanUsername},
         ${hashedPassword},
-        ${name || username.trim()},
-        ${branch || "AIML-3A"},
+        ${cleanName},
+        ${branch?.trim() || "AIML-3A"},
         ${initialHeld},
         ${initialPresent},
         16,

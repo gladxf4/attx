@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Check } from "lucide-react";
+import { X, Minus, Plus } from "lucide-react";
 import { UserProfile, AttendanceMetrics } from "@/lib/types";
 
 interface EditBaselineModalProps {
@@ -33,16 +33,29 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
 
   if (!isOpen) return null;
 
+  const updateHeldToday = (val: number) => {
+    const clamped = Math.max(0, Math.min(8, val));
+    setThursdayHeld(clamped);
+    if (thursdayPresent > clamped) {
+      setThursdayPresent(clamped);
+    }
+  };
+
+  const updateAttendedToday = (val: number) => {
+    const clamped = Math.max(0, Math.min(thursdayHeld, val));
+    setThursdayPresent(clamped);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
       await onSave({
-        totalHeld: Number(totalHeld),
-        academicPresent: Number(academicPresent),
-        thursdayHeld: Number(thursdayHeld),
-        thursdayPresent: Number(thursdayPresent),
-        targetPercentage: Number(targetPercentage),
+        totalHeld: Math.max(1, Number(totalHeld)),
+        academicPresent: Math.max(0, Math.min(Number(totalHeld), Number(academicPresent))),
+        thursdayHeld,
+        thursdayPresent,
+        targetPercentage: Math.max(50, Math.min(100, Number(targetPercentage))),
       });
       onClose();
     } catch (err) {
@@ -70,7 +83,7 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-zinc-300 mb-1">
+              <label className="block text-xs font-medium text-zinc-300 mb-1">
                 Total Held (as of Wed)
               </label>
               <input
@@ -79,11 +92,11 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
                 required
                 value={totalHeld}
                 onChange={(e) => setTotalHeld(Number(e.target.value))}
-                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none"
+                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm font-mono text-white focus:border-zinc-500 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-300 mb-1">
+              <label className="block text-xs font-medium text-zinc-300 mb-1">
                 Present (as of Wed)
               </label>
               <input
@@ -93,41 +106,73 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
                 required
                 value={academicPresent}
                 onChange={(e) => setAcademicPresent(Number(e.target.value))}
-                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none"
+                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm font-mono text-white focus:border-zinc-500 focus:outline-none"
               />
             </div>
           </div>
 
+          {/* Steppers for Thursday Classes */}
           <div className="p-3 bg-zinc-900 rounded-md border border-zinc-800 space-y-2">
-            <span className="text-xs text-zinc-300 font-medium block">Thursday Classes (Today)</span>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-zinc-300 font-medium">Thursday Classes (Today)</span>
+              <span className="text-[10px] text-zinc-500">Max 8 lecs/day</span>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] text-zinc-400 mb-1">Held Today</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="8"
-                  value={thursdayHeld}
-                  onChange={(e) => setThursdayHeld(Number(e.target.value))}
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-white"
-                />
+                <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded p-1">
+                  <button
+                    type="button"
+                    onClick={() => updateHeldToday(thursdayHeld - 1)}
+                    disabled={thursdayHeld <= 0}
+                    className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
+                  >
+                    <Minus className="h-3 w-3" />
+                  </button>
+                  <span className="font-mono text-xs font-bold text-white px-2">
+                    {thursdayHeld}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => updateHeldToday(thursdayHeld + 1)}
+                    disabled={thursdayHeld >= 8}
+                    className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
+
               <div>
                 <label className="block text-[11px] text-zinc-400 mb-1">Attended Today</label>
-                <input
-                  type="number"
-                  min="0"
-                  max={thursdayHeld}
-                  value={thursdayPresent}
-                  onChange={(e) => setThursdayPresent(Number(e.target.value))}
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-white"
-                />
+                <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded p-1">
+                  <button
+                    type="button"
+                    onClick={() => updateAttendedToday(thursdayPresent - 1)}
+                    disabled={thursdayPresent <= 0}
+                    className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
+                  >
+                    <Minus className="h-3 w-3" />
+                  </button>
+                  <span className="font-mono text-xs font-bold text-white px-2">
+                    {thursdayPresent}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => updateAttendedToday(thursdayPresent + 1)}
+                    disabled={thursdayPresent >= thursdayHeld}
+                    className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-300 mb-1">
+            <label className="block text-xs font-medium text-zinc-300 mb-1">
               Target Eligibility (%)
             </label>
             <input
@@ -136,7 +181,7 @@ export const EditBaselineModal: React.FC<EditBaselineModalProps> = ({
               max="100"
               value={targetPercentage}
               onChange={(e) => setTargetPercentage(Number(e.target.value))}
-              className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none"
+              className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm font-mono text-white focus:border-zinc-500 focus:outline-none"
             />
           </div>
 
