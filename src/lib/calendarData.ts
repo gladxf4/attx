@@ -62,6 +62,20 @@ const VERIFIED_ERP_NOVEMBER_LOGS: Record<string, PeriodDetail[]> = {
   ],
 };
 
+export function getTodayErpRecords(liveErpDatewise: Record<string, DatewiseSubjectLog[]> = {}): DatewiseSubjectLog[] {
+  if (liveErpDatewise["2026-11-19"] && liveErpDatewise["2026-11-19"].length > 0) {
+    return liveErpDatewise["2026-11-19"];
+  }
+  return VERIFIED_ERP_NOVEMBER_LOGS["2026-11-19"].map((p) => ({
+    code: p.subjectCode,
+    name: p.subjectName,
+    held: p.held,
+    present: p.present,
+    status: (p.status || (p.present > 0 ? "P" : "A")) as "P" | "A",
+    isLab: p.isLab,
+  }));
+}
+
 export function getNovemberAttendanceSchedule(
   todaySubjects: SubjectRecord[] = [],
   liveErpDatewise: Record<string, DatewiseSubjectLog[]> = {}

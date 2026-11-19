@@ -3,12 +3,12 @@
 @tailwind utilities;
 
 :root {
-  --background: #090a0f;
+  --background: #08090e;
   --foreground: #f4f4f7;
-  --surface: #101118;
-  --surface-elevated: #161822;
-  --card-border: rgba(255, 255, 255, 0.07);
-  --card-border-hover: rgba(255, 255, 255, 0.14);
+  --surface: #0e1017;
+  --surface-elevated: #141722;
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-border-hover: rgba(255, 255, 255, 0.12);
 }
 
 body {
@@ -20,10 +20,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Apple Pro Matte Texture: Subtle microscopic grain instead of generic dotted grid */
+/* Atmospheric Obsidian Canvas with deep ambient radial light */
 .apple-canvas {
-  background-color: #090a0f;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.028'/%3E%3C/svg%3E");
+  background-color: #08090e;
+  background-image: 
+    radial-gradient(circle at 50% -12%, rgba(56, 80, 160, 0.14) 0%, rgba(9, 10, 15, 0.8) 55%, #06070a 100%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+  background-attachment: fixed;
 }
 
 /* Hide native number input spinners */
@@ -36,14 +39,14 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-/* Apple-style precision glass surfaces */
+/* Apple Pro Fluid Glass Surfaces */
 .apple-card {
-  background: rgba(16, 17, 24, 0.72);
+  background: rgba(14, 16, 23, 0.75);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 20px;
-  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.75), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 22px;
+  box-shadow: 0 20px 48px -16px rgba(0, 0, 0, 0.65), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -52,11 +55,11 @@ input[type="number"] {
 }
 
 .apple-surface {
-  background: rgba(22, 24, 34, 0.65);
+  background: rgba(20, 23, 33, 0.65);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
 }
 
 .apple-interactive {

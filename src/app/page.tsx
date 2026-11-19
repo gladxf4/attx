@@ -15,6 +15,7 @@ import { FeedbackModal } from "@/components/FeedbackModal";
 import { GuestOnboarding } from "@/components/GuestOnboarding";
 import { UserProfile, AttendanceMetrics, SubjectRecord, DatewiseSubjectLog } from "@/lib/types";
 import { calculateAttendanceMetrics } from "@/lib/attendanceEngine";
+import { getTodayErpRecords } from "@/lib/calendarData";
 
 export default function Home() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -60,6 +61,7 @@ export default function Home() {
   // 1. Instant 0ms synchronous local hydration from localStorage
   useEffect(() => {
     let localDataFound = false;
+    const token = localStorage.getItem("attendx_token");
 
     try {
       const storedDatewise = localStorage.getItem("attendx_datewise_erp");
@@ -80,35 +82,65 @@ export default function Home() {
         }
       }
 
-      // Check for cached user or guest baseline for instant calculation
-      const savedGuest = localStorage.getItem("attendx_guest_data");
-      if (savedGuest) {
+      // Check cached session for signed-in user to prevent flashing Guest mode
+      const cachedUser = localStorage.getItem("attendx_cached_user");
+      const cachedMetrics = localStorage.getItem("attendx_cached_metrics");
+      if (token && cachedUser && cachedMetrics) {
         try {
-          const parsed = JSON.parse(savedGuest);
-          const synchronousMetrics = calculateAttendanceMetrics(
-            parsed.totalHeld,
-            parsed.academicPresent,
-            parsed.thursdayHeld || 0,
-            parsed.thursdayPresent || 0,
-            parsed.targetPercentage || 75,
-            parsed.concessionBuffer,
-            parsed.officialPercentage
-          );
-          setMetrics(synchronousMetrics);
+          setUser(JSON.parse(cachedUser));
+          setMetrics(JSON.parse(cachedMetrics));
           setHasData(true);
           localDataFound = true;
         } catch (e) {
-          console.error("Local metrics parse error:", e);
+          console.error("Cached session parse error:", e);
+        }
+      }
+
+      // Check for cached guest baseline if no token
+      if (!token) {
+        const savedGuest = localStorage.getItem("attendx_guest_data");
+        if (savedGuest) {
+          try {
+            const parsed = JSON.parse(savedGuest);
+            const todayLogs = getTodayErpRecords(storedDatewise ? JSON.parse(storedDatewise) : {});
+            const todayErpHeld = todayLogs.reduce((acc, l) => acc + (l.held || 1), 0);
+            const todayErpPresent = todayLogs.reduce(
+              (acc, l) => acc + (l.present !== undefined ? l.present : l.status === "P" ? (l.held || 1) : 0),
+              0
+            );
+            const effectiveHeld = parsed.thursdayHeld !== undefined && parsed.thursdayHeld > 0 ? parsed.thursdayHeld : todayErpHeld;
+            const effectivePres = parsed.thursdayPresent !== undefined && parsed.thursdayPresent > 0 ? parsed.thursdayPresent : todayErpPresent;
+
+            const synchronousMetrics = calculateAttendanceMetrics(
+              parsed.totalHeld,
+              parsed.academicPresent,
+              effectiveHeld,
+              effectivePres,
+              parsed.targetPercentage || 75,
+              parsed.concessionBuffer,
+              parsed.officialPercentage
+            );
+            setMetrics(synchronousMetrics);
+            setHasData(true);
+            localDataFound = true;
+          } catch (e) {
+            console.error("Local metrics parse error:", e);
+          }
         }
       }
     } catch (err) {
       console.error("Local storage access error:", err);
     }
 
-    // App is instantly usable right now
-    setIsLoading(false);
+    if (localDataFound) {
+      setIsLoading(false);
+    } else if (!token) {
+      // Neither token nor guest data exists
+      setIsLoading(false);
+      setHasData(false);
+    }
+    // If token exists but no cached metrics yet, keep isLoading true until triggerBackgroundSync resolves
 
-    // 2. Non-blocking background sync
     triggerBackgroundSync(localDataFound);
   }, []);
 
@@ -116,25 +148,36 @@ export default function Home() {
     try {
       const token = localStorage.getItem("attendx_token");
       if (token) {
-        fetch("/api/auth/me", {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
+        try {
+          const res = await fetch("/api/auth/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
             if (data?.user) {
               setUser(data.user);
+              localStorage.setItem("attendx_cached_user", JSON.stringify(data.user));
               if (data.user?.custom_subjects && Array.isArray(data.user.custom_subjects) && data.user.custom_subjects.length > 0) {
                 setSubjects(data.user.custom_subjects);
               }
               if (data.metrics) {
                 setMetrics(data.metrics);
+                localStorage.setItem("attendx_cached_metrics", JSON.stringify(data.metrics));
                 setHasData(true);
               }
-            } else {
-              localStorage.removeItem("attendx_token");
             }
-          })
-          .catch((e) => console.error("Background auth error:", e));
+          } else {
+            localStorage.removeItem("attendx_token");
+            localStorage.removeItem("attendx_cached_user");
+            localStorage.removeItem("attendx_cached_metrics");
+            setUser(null);
+            setHasData(false);
+          }
+        } catch (e) {
+          console.error("Background auth error:", e);
+        } finally {
+          setIsLoading(false);
+        }
       }
 
       // Quiet ERP background synchronization
@@ -180,6 +223,7 @@ export default function Home() {
       console.error("Auto ERP background sync error:", err);
     } finally {
       setIsSyncing(false);
+      setIsLoading(false);
     }
   };
 
@@ -323,11 +367,23 @@ export default function Home() {
       console.error(e);
     }
 
+    // Determine today's periods already officially recorded on ERP
+    const todayLogs = getTodayErpRecords(datewiseAtt || erpDatewise);
+    const todayErpHeld = todayLogs.reduce((acc, l) => acc + (l.held || 1), 0);
+    const todayErpPresent = todayLogs.reduce(
+      (acc, l) => acc + (l.present !== undefined ? l.present : l.status === "P" ? (l.held || 1) : 0),
+      0
+    );
+
+    // If held tally already includes today's records (e.g. 426 held vs 421 yesterday), baseline is previous days
+    const baseHeld = Math.max(0, held - todayErpHeld);
+    const basePresent = Math.max(0, present - todayErpPresent);
+
     const updated = {
-      totalHeld: held,
-      academicPresent: present,
-      thursdayHeld: 0,
-      thursdayPresent: 0,
+      totalHeld: baseHeld,
+      academicPresent: basePresent,
+      thursdayHeld: todayErpHeld,
+      thursdayPresent: todayErpPresent,
       targetPercentage: metrics?.targetPercentage ?? 75,
       concessionBuffer: finalBuffer,
       officialPercentage: officialPct,
@@ -358,20 +414,31 @@ export default function Home() {
       console.error(e);
     }
 
-    const newHeld = updatedSubjects.reduce((acc, s) => acc + (s.todayHeld || 0), 0);
-    const newPres = updatedSubjects.reduce((acc, s) => acc + (s.todayPresent || 0), 0);
+    const todayLogs = getTodayErpRecords(erpDatewise);
+    const todayErpHeld = todayLogs.reduce((acc, l) => acc + (l.held || 1), 0);
+    const todayErpPresent = todayLogs.reduce(
+      (acc, l) => acc + (l.present !== undefined ? l.present : l.status === "P" ? (l.held || 1) : 0),
+      0
+    );
+
+    const userHeld = updatedSubjects.reduce((acc, s) => acc + (s.todayHeld || 0), 0);
+    const userPres = updatedSubjects.reduce((acc, s) => acc + (s.todayPresent || 0), 0);
+
+    const totalHeldToday = todayErpHeld + userHeld;
+    const totalPresentToday = todayErpPresent + userPres;
 
     if (metrics) {
       const immediate = calculateAttendanceMetrics(
         metrics.wednesdayHeld,
         metrics.wednesdayPresent,
-        newHeld,
-        newPres,
+        totalHeldToday,
+        totalPresentToday,
         metrics.targetPercentage || 75,
         metrics.concessionBuffer,
         metrics.wednesdayPercentage
       );
       setMetrics(immediate);
+      localStorage.setItem("attendx_cached_metrics", JSON.stringify(immediate));
 
       if (saveDebounceTimerRef.current) {
         clearTimeout(saveDebounceTimerRef.current);
@@ -381,8 +448,8 @@ export default function Home() {
         handleSaveSettings({
           totalHeld: metrics.wednesdayHeld,
           academicPresent: metrics.wednesdayPresent,
-          thursdayHeld: newHeld,
-          thursdayPresent: newPres,
+          thursdayHeld: totalHeldToday,
+          thursdayPresent: totalPresentToday,
           targetPercentage: metrics.targetPercentage || 75,
           concessionBuffer: metrics.concessionBuffer,
           custom_subjects: updatedSubjects,
@@ -513,6 +580,7 @@ export default function Home() {
           <div ref={periodTrackerRef} id="today-period-tracker">
             <TodayPeriodTracker
               subjects={subjects}
+              erpTodayLogs={getTodayErpRecords(erpDatewise)}
               onUpdateSubjects={handleUpdateSubjects}
             />
           </div>

@@ -153,11 +153,19 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
         className="w-full max-w-sm"
       >
         {/* Brand */}
-        <div className="flex items-center justify-center space-x-3 mb-6">
-          <div className="h-10 w-10 rounded-2xl bg-zinc-900 border border-white/[0.1] p-1.5 flex items-center justify-center shadow-inner">
-            <img src="/logo.png" alt="AttendX" className="h-full w-full object-contain" />
+        <div className="flex flex-col items-center justify-center mb-7">
+          <div className="relative flex items-center justify-center mb-3">
+            <div className="absolute -inset-2 rounded-3xl bg-gradient-to-tr from-blue-600/30 via-indigo-500/20 to-emerald-500/20 blur-xl opacity-80 animate-pulse pointer-events-none" />
+            <div className="relative h-16 w-16 rounded-2xl bg-zinc-900/90 border border-white/[0.12] p-2.5 flex items-center justify-center shadow-2xl backdrop-blur-xl">
+              <img src="/logo.png" alt="AttendX" className="h-full w-full object-contain filter drop-shadow" />
+            </div>
           </div>
-          <span className="font-bold text-lg text-white tracking-tight">AttendX</span>
+          <h1 className="text-3xl font-black text-white tracking-tight font-sans">
+            AttendX
+          </h1>
+          <p className="text-xs text-zinc-400 mt-1 font-medium">
+            Precision Attendance Intelligence
+          </p>
         </div>
 
         {/* Card */}
@@ -172,7 +180,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              Guest Mode
+              Guest
             </button>
             <button
               onClick={() => { setMode("auth"); setAuthError(null); }}
