@@ -53,8 +53,9 @@ export const SubjectAuditModal: React.FC<SubjectAuditModalProps> = ({
   if (!isOpen) return null;
 
   const isLabCourse = (s: SubjectRecord) => {
+    if (isLabSubject(s.code, s.name)) return true;
     if (s.isLab !== undefined) return s.isLab;
-    return isLabSubject(s.code, s.name);
+    return false;
   };
 
   const toggleLabType = (code: string) => {

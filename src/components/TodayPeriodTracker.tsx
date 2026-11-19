@@ -22,8 +22,9 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
 
   // Determine whether a subject is a lab or lecture using university code and name rules
   const isLabCourse = (s: SubjectRecord) => {
+    if (isLabSubject(s.code, s.name)) return true;
     if (s.isLab !== undefined) return s.isLab;
-    return isLabSubject(s.code, s.name);
+    return false;
   };
 
   const totalHeldToday = subjects.reduce((acc, s) => acc + (s.todayHeld || 0), 0);

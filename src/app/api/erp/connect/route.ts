@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isLabSubject } from "@/lib/attendanceEngine";
 
 const ERP_BASE = "https://erp.abes.ac.in";
 
@@ -155,6 +156,7 @@ async function fetchAttendanceData(cookieHeader: string, erpId?: string) {
     const abs = parseInt(r.Absent) || 0;
     const pct = parseFloat(r.Percentage) || 0;
     const needed = Math.max(0, Math.ceil(0.75 * held - pres));
+    const isLab = isLabSubject(r.SubCollegeCode, r.SubName);
     return {
       code: r.SubCollegeCode,
       name: r.SubName,
@@ -163,6 +165,7 @@ async function fetchAttendanceData(cookieHeader: string, erpId?: string) {
       abs,
       pct,
       needed75: needed,
+      isLab,
     };
   });
 

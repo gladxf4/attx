@@ -26,7 +26,7 @@ export function isLabSubject(code?: string, name?: string): boolean {
   if (/5\d$/.test(c)) return true;
   if (/L$/i.test(c)) return true;
 
-  // 2. Name keywords: labs, workshops, practicals, cloud, web dev, employability, holistic skill
+  // 2. Name keywords: labs, workshops, practicals, cloud, web dev, employability, embedded systems, holistic skill, es
   if (
     n.includes("lab") ||
     n.includes("workshop") ||
@@ -35,6 +35,8 @@ export function isLabSubject(code?: string, name?: string): boolean {
     n.includes("web design") ||
     n.includes("employability") ||
     n.includes("practical") ||
+    n.includes("embedded") ||
+    /\bes\b/i.test(n) ||
     n.includes("oops lab") ||
     n.includes("os lab") ||
     n.includes("holistic") ||
