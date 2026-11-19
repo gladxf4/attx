@@ -11,12 +11,14 @@ import { SubjectAuditModal } from "@/components/SubjectAuditModal";
 import { ERPSyncModal } from "@/components/ERPSyncModal";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { GuestOnboarding } from "@/components/GuestOnboarding";
-import { UserProfile, AttendanceMetrics, SubjectRecord } from "@/lib/types";
+import { UserProfile, AttendanceMetrics, SubjectRecord, DatewiseSubjectLog } from "@/lib/types";
+import { calculateAttendanceMetrics } from "@/lib/attendanceEngine";
 
 export default function Home() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [metrics, setMetrics] = useState<AttendanceMetrics | null>(null);
   const [subjects, setSubjects] = useState<SubjectRecord[]>([]);
+  const [erpDatewise, setErpDatewise] = useState<Record<string, DatewiseSubjectLog[]>>({});
   const [hasData, setHasData] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -25,6 +27,7 @@ export default function Home() {
   const [isSyncOpen, setIsSyncOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
+  const saveDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const periodTrackerRef = useRef<HTMLDivElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const [activeCalendarDate, setActiveCalendarDate] = useState<string | null>(null);
@@ -39,6 +42,15 @@ export default function Home() {
   useEffect(() => {
     const init = async () => {
       try {
+        const storedDatewise = localStorage.getItem("attendx_datewise_erp");
+        if (storedDatewise) {
+          try {
+            setErpDatewise(JSON.parse(storedDatewise));
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
         const token = localStorage.getItem("attendx_token");
         if (token) {
           const res = await fetch("/api/auth/me", {
@@ -162,9 +174,11 @@ export default function Home() {
     localStorage.removeItem("attendx_guest_data");
     localStorage.removeItem("attendx_subjects");
     localStorage.removeItem("attendx_erp_session");
+    localStorage.removeItem("attendx_datewise_erp");
     setUser(null);
     setMetrics(null);
     setSubjects([]);
+    setErpDatewise({});
     setHasData(false);
   };
 
@@ -182,39 +196,38 @@ export default function Home() {
     const subList = data.custom_subjects !== undefined ? data.custom_subjects : subjects;
 
     if (token) {
-      const res = await fetch("/api/attendance", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ...data,
-          factorBuffer: bufferVal,
-          custom_subjects: subList,
-        }),
-      });
-      if (res.ok) {
-        const resData = await res.json();
-        setUser(resData.user);
-        setMetrics(resData.metrics);
-        if (resData.user?.custom_subjects) {
-          setSubjects(resData.user.custom_subjects);
+      try {
+        const res = await fetch("/api/attendance", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            ...data,
+            factorBuffer: bufferVal,
+            custom_subjects: subList,
+          }),
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          setUser(resData.user);
+          // Only overwrite metrics from server if no pending local debounced changes
+          if (!saveDebounceTimerRef.current && resData.metrics) {
+            setMetrics(resData.metrics);
+          }
+          if (resData.user?.custom_subjects && !saveDebounceTimerRef.current) {
+            setSubjects(resData.user.custom_subjects);
+          }
+          setHasData(true);
         }
-        setHasData(true);
+      } catch (err) {
+        console.error("Save settings network error:", err);
       }
     } else {
       const guestPayload = { ...data, concessionBuffer: bufferVal };
       localStorage.setItem("attendx_guest_data", JSON.stringify(guestPayload));
-      const calcRes = await fetch("/api/calculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(guestPayload),
-      });
-      if (calcRes.ok) {
-        const calcData = await calcRes.json();
-        setMetrics(calcData.metrics);
-      }
+      // In guest mode, metrics are already synchronously updated locally
     }
   };
 
@@ -223,8 +236,18 @@ export default function Home() {
     present: number,
     buffer: number = 0,
     officialPct?: number,
-    importedSubjects?: SubjectRecord[]
+    importedSubjects?: SubjectRecord[],
+    datewiseAtt?: Record<string, any[]>
   ) => {
+    if (datewiseAtt && Object.keys(datewiseAtt).length > 0) {
+      setErpDatewise(datewiseAtt);
+      try {
+        localStorage.setItem("attendx_datewise_erp", JSON.stringify(datewiseAtt));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     let finalBuffer = buffer;
     if (officialPct !== undefined && officialPct > 0 && held > 0) {
       finalBuffer = Math.max(0, Math.round((officialPct / 100) * held) - present);
@@ -289,6 +312,7 @@ export default function Home() {
   };
 
   const handleUpdateSubjects = (updatedSubjects: SubjectRecord[]) => {
+    // 1. Immediately update subjects locally with 0ms delay
     setSubjects(updatedSubjects);
     try {
       localStorage.setItem("attendx_subjects", JSON.stringify(updatedSubjects));
@@ -299,17 +323,35 @@ export default function Home() {
     const newHeld = updatedSubjects.reduce((acc, s) => acc + (s.todayHeld || 0), 0);
     const newPres = updatedSubjects.reduce((acc, s) => acc + (s.todayPresent || 0), 0);
 
+    // 2. Immediately recalculate attendance metrics synchronously (0ms delay)
     if (metrics) {
-      const updated = {
-        totalHeld: metrics.wednesdayHeld,
-        academicPresent: metrics.wednesdayPresent,
-        thursdayHeld: newHeld,
-        thursdayPresent: newPres,
-        targetPercentage: metrics.targetPercentage || 75,
-        concessionBuffer: metrics.concessionBuffer,
-        custom_subjects: updatedSubjects,
-      };
-      handleSaveSettings(updated);
+      const immediate = calculateAttendanceMetrics(
+        metrics.wednesdayHeld,
+        metrics.wednesdayPresent,
+        newHeld,
+        newPres,
+        metrics.targetPercentage || 75,
+        metrics.concessionBuffer,
+        metrics.wednesdayPercentage
+      );
+      setMetrics(immediate);
+
+      // 3. Debounce background server sync to eliminate UI stutter & duplicate network traffic
+      if (saveDebounceTimerRef.current) {
+        clearTimeout(saveDebounceTimerRef.current);
+      }
+      saveDebounceTimerRef.current = setTimeout(() => {
+        saveDebounceTimerRef.current = null;
+        handleSaveSettings({
+          totalHeld: metrics.wednesdayHeld,
+          academicPresent: metrics.wednesdayPresent,
+          thursdayHeld: newHeld,
+          thursdayPresent: newPres,
+          targetPercentage: metrics.targetPercentage || 75,
+          concessionBuffer: metrics.concessionBuffer,
+          custom_subjects: updatedSubjects,
+        });
+      }, 800);
     }
   };
 
@@ -377,7 +419,6 @@ export default function Home() {
             <TodayPeriodTracker
               subjects={subjects}
               onUpdateSubjects={handleUpdateSubjects}
-              onUpdateTodayTotals={handleUpdateTodayTotals}
             />
           </div>
         )}
@@ -393,8 +434,10 @@ export default function Home() {
           <AttendanceCalendarView
             metrics={metrics}
             subjects={subjects}
+            erpDatewise={erpDatewise}
             activeModalDateStr={activeCalendarDate}
             onCloseModal={() => setActiveCalendarDate(null)}
+            onScrollToPeriodTracker={scrollToPeriodTracker}
           />
         </div>
       </main>

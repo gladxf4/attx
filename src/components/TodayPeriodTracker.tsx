@@ -7,7 +7,7 @@ import { SubjectRecord } from "@/lib/types";
 interface TodayPeriodTrackerProps {
   subjects: SubjectRecord[];
   onUpdateSubjects: (updated: SubjectRecord[]) => void;
-  onUpdateTodayTotals: (held: number, present: number) => void;
+  onUpdateTodayTotals?: (held: number, present: number) => void;
 }
 
 export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
@@ -66,10 +66,6 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
     });
 
     onUpdateSubjects(updated);
-
-    const newTotalHeld = updated.reduce((acc, s) => acc + (s.todayHeld || 0), 0);
-    const newTotalPres = updated.reduce((acc, s) => acc + (s.todayPresent || 0), 0);
-    onUpdateTodayTotals(newTotalHeld, newTotalPres);
   };
 
   // Toggle subject classification (Lab vs Lecture)
@@ -93,7 +89,6 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
       todayPresent: 0,
     }));
     onUpdateSubjects(updated);
-    onUpdateTodayTotals(0, 0);
   };
 
   const filteredSubjects = subjects.filter((s) => {

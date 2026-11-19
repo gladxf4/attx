@@ -143,28 +143,110 @@ async function fetchAttendanceData(cookieHeader: string, erpId?: string) {
   }
 
   // Extract individual subject breakdown
-  const subjects = sumData
-    .filter(
-      (r: any) =>
-        r.SubCollegeCode &&
-        !String(r.SubName).toLowerCase().includes("total")
-    )
-    .map((r: any) => {
-      const held = parseInt(r.NoOfLecture) || 0;
-      const pres = parseInt(r.Present) || 0;
-      const abs = parseInt(r.Absent) || 0;
-      const pct = parseFloat(r.Percentage) || 0;
-      const needed = Math.max(0, Math.ceil(0.75 * held - pres));
-      return {
-        code: r.SubCollegeCode,
-        name: r.SubName,
-        held,
-        pres,
-        abs,
-        pct,
-        needed75: needed,
-      };
-    });
+  const rawSubjectRows = sumData.filter(
+    (r: any) =>
+      r.SubCollegeCode &&
+      !String(r.SubName).toLowerCase().includes("total")
+  );
+
+  const subjects = rawSubjectRows.map((r: any) => {
+    const held = parseInt(r.NoOfLecture) || 0;
+    const pres = parseInt(r.Present) || 0;
+    const abs = parseInt(r.Absent) || 0;
+    const pct = parseFloat(r.Percentage) || 0;
+    const needed = Math.max(0, Math.ceil(0.75 * held - pres));
+    return {
+      code: r.SubCollegeCode,
+      name: r.SubName,
+      held,
+      pres,
+      abs,
+      pct,
+      needed75: needed,
+    };
+  });
+
+  // Extract subjectId from Action: <i onclick="show('SU00013')">
+  const subjectsWithId = rawSubjectRows.map((r: any) => {
+    const match = (r.Action || "").match(/show\(['"]([^'"]+)['"]\)/);
+    return {
+      code: r.SubCollegeCode,
+      name: r.SubName,
+      subjectId: match ? match[1] : null,
+    };
+  });
+
+  // Normalize date string "19 Nov 2026" -> "2026-11-19"
+  const parseDateToIso = (raw: string): string | null => {
+    if (!raw) return null;
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length < 3) return null;
+    const day = parseInt(parts[0]);
+    const monStr = parts[1].toLowerCase().slice(0, 3);
+    const yr = parts[2];
+    const monthMap: Record<string, string> = {
+      jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+      jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+    };
+    const mm = monthMap[monStr] || "11";
+    const dd = day < 10 ? `0${day}` : `${day}`;
+    return `${yr}-${mm}-${dd}`;
+  };
+
+  // Fetch verified subject-level datewise attendance in parallel
+  const datewiseAttendance: Record<string, any[]> = {};
+  await Promise.all(
+    subjectsWithId.map(async (s: any) => {
+      if (!s.subjectId) return;
+      try {
+        const subRes = await fetch(
+          `${ERP_BASE}/ERP/Dashboard/Student/Attendance/Default.aspx/getSubjectAtt`,
+          {
+            method: "POST",
+            headers: ajaxHeaders,
+            body: JSON.stringify({
+              StudentDashBAL: {
+                semid: activeSem,
+                subjectid: s.subjectId,
+                mode: "MySubjectAttendance",
+              },
+            }),
+          }
+        );
+        if (subRes.ok) {
+          const subJson = await subRes.json();
+          if (subJson?.d) {
+            const records = JSON.parse(subJson.d);
+            for (const rec of records) {
+              if (!rec.AttDate) continue;
+              const isoDate = parseDateToIso(rec.AttDate);
+              if (!isoDate) continue;
+              if (!datewiseAttendance[isoDate]) {
+                datewiseAttendance[isoDate] = [];
+              }
+              const isPres =
+                (rec.Attendance || "").includes(">P<") ||
+                rec.Attendance === "P";
+              const nLec = parseInt(rec.NoOfLecture) || 1;
+              datewiseAttendance[isoDate].push({
+                code: s.code,
+                name: s.name,
+                held: nLec,
+                present: isPres ? nLec : 0,
+                status: isPres ? "P" : "A",
+                isLab:
+                  s.name.toLowerCase().includes("lab") ||
+                  s.name.toLowerCase().includes("workshop") ||
+                  nLec > 1,
+              });
+            }
+          }
+        }
+      } catch {
+        // Silently continue if single subject datewise fetch fails
+      }
+    })
+  );
 
   return {
     totalHeld,
@@ -173,6 +255,7 @@ async function fetchAttendanceData(cookieHeader: string, erpId?: string) {
     officialPercentage,
     subjects,
     activeSem,
+    datewiseAttendance,
   };
 }
 

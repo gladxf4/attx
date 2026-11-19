@@ -11,6 +11,33 @@ export interface SubjectRecord {
   todayPresent?: number;
 }
 
+export interface DatewiseSubjectLog {
+  code: string;
+  name: string;
+  held: number;
+  present: number;
+  status: "P" | "A";
+  isLab?: boolean;
+}
+
+export interface DayAttendanceLog {
+  dateStr: string; // "2026-11-19"
+  displayDate: string; // "19 Nov"
+  dayNumber: number; // 19
+  dayName: string; // "Thursday"
+  dayShort: string; // "Thu"
+  isWeekend: boolean;
+  isHoliday: boolean;
+  holidayReason?: string;
+  isToday: boolean;
+  isFuture: boolean;
+  isExamDay: boolean;
+  totalHeld: number;
+  totalPresent: number;
+  records: DatewiseSubjectLog[];
+  isVerifiedERP?: boolean;
+}
+
 export interface UserProfile {
   id: string;
   username: string;

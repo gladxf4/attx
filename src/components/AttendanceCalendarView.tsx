@@ -24,19 +24,23 @@ import { getDynamicMT2Horizon } from "@/lib/attendanceEngine";
 interface AttendanceCalendarViewProps {
   metrics: AttendanceMetrics;
   subjects?: SubjectRecord[];
+  erpDatewise?: Record<string, any>;
   onUpdateTodayTotals?: (held: number, present: number) => void;
   onUpdateSubjects?: (subjects: SubjectRecord[]) => void;
   activeModalDateStr?: string | null;
   onCloseModal?: () => void;
+  onScrollToPeriodTracker?: () => void;
 }
 
 export const AttendanceCalendarView: React.FC<AttendanceCalendarViewProps> = ({
   metrics,
   subjects = [],
+  erpDatewise = {},
   onUpdateTodayTotals,
   onUpdateSubjects,
   activeModalDateStr,
   onCloseModal,
+  onScrollToPeriodTracker,
 }) => {
   const [viewMode, setViewMode] = useState<"calendar" | "forecast">("calendar");
 
@@ -47,8 +51,8 @@ export const AttendanceCalendarView: React.FC<AttendanceCalendarViewProps> = ({
 
   // Raw Schedule for November 2026
   const rawSchedule = useMemo(() => {
-    return getNovemberAttendanceSchedule(subjects);
-  }, [subjects, metrics.thursdayHeld, metrics.thursdayPresent]);
+    return getNovemberAttendanceSchedule(subjects, erpDatewise);
+  }, [subjects, erpDatewise, metrics.thursdayHeld, metrics.thursdayPresent]);
 
   // Selected date for detail modal
   const [selectedDateStr, setSelectedDateStr] = useState<string>("2026-11-19");
@@ -374,6 +378,27 @@ export const AttendanceCalendarView: React.FC<AttendanceCalendarViewProps> = ({
               )}
             </div>
 
+            {/* Today's ERP Upload Progress & Quick Link */}
+            {selectedDay.isToday && (
+              <div className="p-3 bg-zinc-950/60 rounded-xl border border-white/[0.06] flex items-center justify-between text-xs text-zinc-400">
+                <span className="flex items-center space-x-2">
+                  <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse inline-block" />
+                  <span>
+                    <strong>{selectedDay.totalHeld}/8</strong> classes marked today ({selectedDay.periods.filter(p => p.source === "erp").reduce((a, b) => a + b.held, 0)} uploaded to ERP)
+                  </span>
+                </span>
+                {onScrollToPeriodTracker && (
+                  <button
+                    type="button"
+                    onClick={onScrollToPeriodTracker}
+                    className="text-xs font-medium text-blue-400 hover:text-blue-300 underline underline-offset-2 transition"
+                  >
+                    Track Today&apos;s Classes ⌵
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Periods Timetable Breakdown */}
             {selectedDay.periods.length === 0 ? (
               <div className="py-6 text-center text-xs text-zinc-500 font-normal">
@@ -407,13 +432,12 @@ export const AttendanceCalendarView: React.FC<AttendanceCalendarViewProps> = ({
                         key={idx}
                         className="p-3 flex items-center justify-between hover:bg-zinc-900/40 transition"
                       >
-                        <div className="flex items-center space-x-2.5 w-1/4">
-                          <span className="font-mono text-zinc-200 text-xs font-semibold">
-                            P{p.periodNumber}
-                            {isLab ? "-P" + (p.periodNumber + 1) : ""}
+                        <div className="flex items-center space-x-2.5 w-24 sm:w-28 shrink-0">
+                          <span className="font-mono text-zinc-300 text-xs font-semibold">
+                            {isLab ? `Lec ${p.periodNumber}-${p.periodNumber + 1}` : `Lec ${p.periodNumber}`}
                           </span>
-                          <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline">
-                            {p.timeSlot}
+                          <span className="text-[10px] text-zinc-500 font-mono">
+                            {p.held} {p.held > 1 ? "lecs" : "lec"}
                           </span>
                         </div>
 
@@ -429,6 +453,11 @@ export const AttendanceCalendarView: React.FC<AttendanceCalendarViewProps> = ({
                             >
                               {isLab ? "Lab (2 Lec)" : "Lecture"}
                             </span>
+                            {p.source === "erp" && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-white/[0.06] font-mono">
+                                ERP
+                              </span>
+                            )}
                           </div>
                           <span className="text-[11px] font-mono text-zinc-500">{p.subjectCode}</span>
                         </div>
