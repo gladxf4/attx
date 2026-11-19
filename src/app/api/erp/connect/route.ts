@@ -228,16 +228,22 @@ async function fetchAttendanceData(cookieHeader: string, erpId?: string) {
                 (rec.Attendance || "").includes(">P<") ||
                 rec.Attendance === "P";
               const nLec = parseInt(rec.NoOfLecture) || 1;
+              const isLab =
+                s.name.toLowerCase().includes("lab") ||
+                s.name.toLowerCase().includes("workshop") ||
+                s.name.toLowerCase().includes("cloud") ||
+                s.name.toLowerCase().includes("web design") ||
+                s.name.toLowerCase().includes("employability") ||
+                /\d{2}[A-Za-z]{2,4}\d5\d/i.test(s.code) ||
+                /5\d$/.test(s.code) ||
+                nLec > 1;
               datewiseAttendance[isoDate].push({
                 code: s.code,
                 name: s.name,
                 held: nLec,
                 present: isPres ? nLec : 0,
                 status: isPres ? "P" : "A",
-                isLab:
-                  s.name.toLowerCase().includes("lab") ||
-                  s.name.toLowerCase().includes("workshop") ||
-                  nLec > 1,
+                isLab,
               });
             }
           }

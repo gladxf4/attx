@@ -17,6 +17,35 @@ export const CALENDAR_DAYS_UNTIL_MT2: CalendarDayInfo[] = [
 
 export const WORKING_DAYS_SCHEDULE = CALENDAR_DAYS_UNTIL_MT2;
 
+export function isLabSubject(code?: string, name?: string): boolean {
+  const c = (code || "").trim();
+  const n = (name || "").toLowerCase().trim();
+
+  // 1. Subject code rules: ABES practical codes contain '5' in the last 2 digits (e.g. 25CS352 vs 25CS302)
+  if (/\d{2}[A-Za-z]{2,4}\d5\d/i.test(c)) return true;
+  if (/5\d$/.test(c)) return true;
+  if (/L$/i.test(c)) return true;
+
+  // 2. Name keywords: labs, workshops, practicals, cloud, web dev, employability, holistic skill
+  if (
+    n.includes("lab") ||
+    n.includes("workshop") ||
+    n.includes("cloud") ||
+    n.includes("web dev") ||
+    n.includes("web design") ||
+    n.includes("employability") ||
+    n.includes("practical") ||
+    n.includes("oops lab") ||
+    n.includes("os lab") ||
+    n.includes("holistic") ||
+    n.includes("skill")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function getRelativeDateText(targetDateStr: string = "2026-11-18"): string {
   try {
     const today = new Date(2026, 10, 19);

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Plus, Minus, RotateCcw, ChevronDown, ChevronUp, Beaker, BookOpen } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SubjectRecord } from "@/lib/types";
+import { isLabSubject } from "@/lib/attendanceEngine";
 
 interface TodayPeriodTrackerProps {
   subjects: SubjectRecord[];
@@ -19,20 +20,10 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [filter, setFilter] = useState<"all" | "labs" | "lectures">("all");
 
-  // Determine whether a subject is a lab or lecture
+  // Determine whether a subject is a lab or lecture using university code and name rules
   const isLabCourse = (s: SubjectRecord) => {
     if (s.isLab !== undefined) return s.isLab;
-    const lower = (s.name || "").toLowerCase();
-    const code = (s.code || "").toLowerCase();
-    return (
-      lower.includes("lab") ||
-      lower.includes("workshop") ||
-      lower.includes("cloud") ||
-      lower.includes("web design") ||
-      lower.includes("employability") ||
-      lower.includes("skill") ||
-      code.includes("35")
-    );
+    return isLabSubject(s.code, s.name);
   };
 
   const totalHeldToday = subjects.reduce((acc, s) => acc + (s.todayHeld || 0), 0);

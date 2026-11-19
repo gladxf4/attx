@@ -95,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Subject-wise breakdown"
           >
             <LayoutGrid className="h-3.5 w-3.5 text-zinc-400" />
-            <span className="hidden sm:inline font-medium">Courses</span>
+            <span className="hidden sm:inline font-medium">Subjects</span>
             {subjectCount > 0 && (
               <span className="text-[10px] font-mono text-zinc-400 bg-white/[0.06] px-1.5 py-0.2 rounded-full">
                 {subjectCount}

@@ -14,9 +14,9 @@ export async function POST(req: Request) {
     const rateData = rateLimitMap.get(ip);
 
     if (rateData && now < rateData.resetAt) {
-      if (rateData.count >= 5) {
+      if (rateData.count >= 6) {
         return NextResponse.json(
-          { error: "Too many feedback submissions. Please wait a few minutes before submitting again." },
+          { error: "Too many feedback submissions. Please wait a few minutes." },
           { status: 429 }
         );
       }
@@ -26,30 +26,35 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { type = "bug", message, contact, context } = body;
+    const { type = "feedback", message = "", contact, rating, heart, context } = body;
 
-    if (!message || typeof message !== "string" || message.trim().length < 5) {
+    const trimmedMsg = typeof message === "string" ? message.trim() : "";
+
+    if (!rating && !heart && trimmedMsg.length < 3) {
       return NextResponse.json(
-        { error: "Please enter a detailed message (at least 5 characters)." },
+        { error: "Please provide a rating, a heart, or a short message." },
         { status: 400 }
       );
     }
 
-    if (message.length > 2000) {
+    if (trimmedMsg.length > 2000) {
       return NextResponse.json(
         { error: "Message exceeds maximum length of 2000 characters." },
         { status: 400 }
       );
     }
 
-    let color = 0x3b82f6; // Blue for general
+    let color = 0x3b82f6;
     let title = "💬 AttendX User Feedback";
     if (type === "bug") {
-      color = 0xef4444; // Rose/Red for bug
+      color = 0xef4444;
       title = "🐛 AttendX Bug Report";
     } else if (type === "feature") {
-      color = 0x8b5cf6; // Purple for feature
-      title = "💡 AttendX Feature Suggestion";
+      color = 0x8b5cf6;
+      title = "💡 AttendX Feature Idea";
+    } else if (heart || (rating && rating >= 4)) {
+      color = 0xec4899; // Pink for appreciation
+      title = "❤️ AttendX Rating & Appreciation";
     }
 
     const fields = [
@@ -59,8 +64,13 @@ export async function POST(req: Request) {
         inline: true,
       },
       {
+        name: "Rating / Heart",
+        value: `${rating ? "⭐".repeat(rating) : "No stars"} ${heart ? "❤️ Loved it" : ""}`,
+        inline: true,
+      },
+      {
         name: "User / Contact",
-        value: contact?.trim() ? `\`${contact.trim()}\`` : "*Anonymous Guest*",
+        value: contact?.trim() ? `\`${contact.trim()}\`` : "*Anonymous Student*",
         inline: true,
       },
     ];
@@ -78,11 +88,13 @@ export async function POST(req: Request) {
       }
     }
 
-    fields.push({
-      name: "Details / Message",
-      value: message.trim(),
-      inline: false,
-    });
+    if (trimmedMsg) {
+      fields.push({
+        name: "Message",
+        value: trimmedMsg,
+        inline: false,
+      });
+    }
 
     const discordPayload = {
       username: "AttendX Feedback",
@@ -108,15 +120,11 @@ export async function POST(req: Request) {
 
     if (!webhookRes.ok) {
       console.error("Discord webhook failed with status:", webhookRes.status);
-      return NextResponse.json(
-        { error: "Could not deliver report to feedback channel." },
-        { status: 502 }
-      );
     }
 
     return NextResponse.json({
       success: true,
-      message: "Feedback submitted successfully! Thank you for helping improve AttendX.",
+      message: "Feedback submitted successfully! Thank you.",
     });
   } catch (err: any) {
     console.error("Feedback route error:", err);

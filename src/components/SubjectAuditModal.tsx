@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { SubjectRecord } from "@/lib/types";
+import { isLabSubject } from "@/lib/attendanceEngine";
 
 interface SubjectAuditModalProps {
   isOpen: boolean;
@@ -53,17 +54,7 @@ export const SubjectAuditModal: React.FC<SubjectAuditModalProps> = ({
 
   const isLabCourse = (s: SubjectRecord) => {
     if (s.isLab !== undefined) return s.isLab;
-    const lower = (s.name || "").toLowerCase();
-    const code = (s.code || "").toLowerCase();
-    return (
-      lower.includes("lab") ||
-      lower.includes("workshop") ||
-      lower.includes("cloud") ||
-      lower.includes("web design") ||
-      lower.includes("employability") ||
-      lower.includes("skill") ||
-      code.includes("35")
-    );
+    return isLabSubject(s.code, s.name);
   };
 
   const toggleLabType = (code: string) => {
@@ -121,13 +112,13 @@ export const SubjectAuditModal: React.FC<SubjectAuditModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-semibold text-white flex items-center space-x-2">
-                <span>Courses & Attendance</span>
+                <span>Subjects & Attendance</span>
                 <span className="text-xs font-mono font-normal text-zinc-400 bg-white/[0.06] px-2 py-0.5 rounded-full">
-                  {subjects.length} courses
+                  {subjects.length} subjects
                 </span>
               </h3>
               <p className="text-xs text-zinc-400">
-                Course-level breakdown synced directly from ERP
+                Subject breakdown synced from ERP
               </p>
             </div>
           </div>
@@ -146,7 +137,7 @@ export const SubjectAuditModal: React.FC<SubjectAuditModalProps> = ({
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
               <input
                 type="text"
-                placeholder="Search course by code or name..."
+                placeholder="Search subject by code or name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-zinc-900/90 border border-white/[0.08] text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white/[0.2] transition"
@@ -208,14 +199,14 @@ export const SubjectAuditModal: React.FC<SubjectAuditModalProps> = ({
         <div className="overflow-y-auto p-4 space-y-2 flex-1 max-h-[60vh]">
           {subjects.length === 0 ? (
             <div className="p-8 text-center rounded-2xl border border-white/[0.06] bg-zinc-900/30">
-              <h4 className="text-sm font-semibold text-white mb-1">No Courses Synced</h4>
+              <h4 className="text-sm font-semibold text-white mb-1">No Subjects Synced</h4>
               <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">
                 Connect your college ERP to load verified subject tallies.
               </p>
             </div>
           ) : filteredSubjects.length === 0 ? (
             <div className="p-8 text-center rounded-2xl border border-white/[0.06] bg-zinc-900/30">
-              <p className="text-xs text-zinc-400">No courses match the query.</p>
+              <p className="text-xs text-zinc-400">No subjects match the query.</p>
             </div>
           ) : (
             filteredSubjects.map((s) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, MessageSquare, Send, Loader2, CheckCircle2, AlertCircle, Lightbulb, Bug } from "lucide-react";
+import { X, Send, Loader2, CheckCircle2, AlertCircle, Heart, Star } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface FeedbackModalProps {
@@ -17,9 +17,11 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   defaultContact = "",
   attendancePct,
 }) => {
-  const [type, setType] = useState<"bug" | "feature" | "feedback">("bug");
+  const [type, setType] = useState<"feedback" | "bug" | "feature">("feedback");
   const [message, setMessage] = useState("");
   const [contact, setContact] = useState(defaultContact);
+  const [rating, setRating] = useState<number>(5);
+  const [isHearted, setIsHearted] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -30,8 +32,8 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
     e.preventDefault();
     setError(null);
 
-    if (!message.trim() || message.trim().length < 5) {
-      setError("Please describe the issue or feedback (at least 5 characters).");
+    if (!rating && !isHearted && (!message.trim() || message.trim().length < 3)) {
+      setError("Please leave a rating, a heart, or a quick comment.");
       return;
     }
 
@@ -45,6 +47,8 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
           type,
           message: message.trim(),
           contact: contact.trim() || undefined,
+          rating,
+          heart: isHearted,
           context: {
             attendancePct,
             userType: defaultContact ? "Signed-In User" : "Guest Student",
@@ -64,7 +68,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
         onClose();
       }, 1400);
     } catch (err: any) {
-      setError(err.message || "Failed to send feedback.");
+      setError(err.message || "Failed to send.");
     } finally {
       setIsSubmitting(false);
     }
@@ -92,60 +96,95 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-base font-semibold text-white">Report Delivered</h3>
+              <h3 className="text-base font-semibold text-white">Thank You!</h3>
               <p className="text-xs text-zinc-400">
-                Your report has been dispatched to our engineering team. Thank you for making AttendX better!
+                Your feedback has been received. Thanks for helping us improve AttendX!
               </p>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <h2 className="text-base font-semibold text-white flex items-center space-x-2">
-                <span>Feedback & Support</span>
-              </h2>
+              <h2 className="text-base font-semibold text-white">Feedback</h2>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Report a bug or suggest improvements
+                Rate your experience or share suggestions
               </p>
             </div>
 
-            {/* Type selector */}
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-900 rounded-xl border border-white/[0.08] text-xs">
+            {/* Rating Stars & Heart Toggle */}
+            <div className="p-3 bg-zinc-900/70 rounded-xl border border-white/[0.08] flex items-center justify-between">
+              {/* 5-star rating */}
+              <div className="flex items-center space-x-1.5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setRating(star)}
+                    className="p-1 text-zinc-600 hover:text-amber-400 transition"
+                  >
+                    <Star
+                      className={`h-5 w-5 ${
+                        star <= rating
+                          ? "text-amber-400 fill-amber-400"
+                          : "text-zinc-600 hover:text-zinc-400"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+
+              {/* Heart like button */}
               <button
                 type="button"
-                onClick={() => setType("bug")}
-                className={`py-1.5 px-2 rounded-lg font-medium flex items-center justify-center space-x-1.5 transition ${
-                  type === "bug"
-                    ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                onClick={() => setIsHearted(!isHearted)}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border transition ${
+                  isHearted
+                    ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
+                    : "bg-zinc-800/80 border-white/[0.08] text-zinc-400 hover:text-white"
+                }`}
+                title="Love AttendX"
+              >
+                <Heart
+                  className={`h-4 w-4 ${isHearted ? "text-rose-400 fill-rose-400" : ""}`}
+                />
+                <span className="text-xs font-medium">Love it</span>
+              </button>
+            </div>
+
+            {/* Type selector */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-900 rounded-xl border border-white/[0.08] text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setType("feedback")}
+                className={`py-1.5 rounded-lg transition ${
+                  type === "feedback"
+                    ? "bg-zinc-800 text-white"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
-                <Bug className="h-3.5 w-3.5" />
-                <span>Bug</span>
+                General
+              </button>
+              <button
+                type="button"
+                onClick={() => setType("bug")}
+                className={`py-1.5 rounded-lg transition ${
+                  type === "bug"
+                    ? "bg-zinc-800 text-rose-300"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Bug
               </button>
               <button
                 type="button"
                 onClick={() => setType("feature")}
-                className={`py-1.5 px-2 rounded-lg font-medium flex items-center justify-center space-x-1.5 transition ${
+                className={`py-1.5 rounded-lg transition ${
                   type === "feature"
-                    ? "bg-purple-500/15 text-purple-300 border border-purple-500/30"
+                    ? "bg-zinc-800 text-purple-300"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
-                <Lightbulb className="h-3.5 w-3.5" />
-                <span>Idea</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setType("feedback")}
-                className={`py-1.5 px-2 rounded-lg font-medium flex items-center justify-center space-x-1.5 transition ${
-                  type === "feedback"
-                    ? "bg-blue-500/15 text-blue-300 border border-blue-500/30"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-                <span>General</span>
+                Idea
               </button>
             </div>
 
@@ -158,18 +197,13 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
 
             <div>
               <label className="block text-xs font-medium text-zinc-300 mb-1">
-                Description
+                Comment (Optional)
               </label>
               <textarea
-                rows={4}
-                required
+                rows={3}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder={
-                  type === "bug"
-                    ? "Describe what happened, what you expected, and any reproduction steps..."
-                    : "Share your thoughts or feature request..."
-                }
+                placeholder="Tell us what you like or what could be improved..."
                 className="w-full rounded-xl border border-white/[0.08] bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white/[0.2] resize-none transition"
               />
             </div>
@@ -182,7 +216,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                 type="text"
                 value={contact}
                 onChange={(e) => setContact(e.target.value)}
-                placeholder="2025B1531... or email"
+                placeholder="2025B1531... or Discord/Email"
                 className="w-full rounded-xl border border-white/[0.08] bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white/[0.2] transition"
               />
             </div>
@@ -191,14 +225,14 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3 py-2 text-xs text-zinc-400 hover:text-white transition"
+                className="px-3.5 py-2 text-xs text-zinc-400 hover:text-white transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-4 py-2 rounded-xl bg-white text-zinc-950 font-semibold text-xs hover:bg-zinc-200 transition flex items-center space-x-1.5 disabled:opacity-50 shadow-md"
+                className="px-5 py-2 rounded-xl bg-white text-zinc-950 font-semibold text-xs hover:bg-zinc-200 transition flex items-center space-x-1.5 disabled:opacity-50 shadow-md"
               >
                 {isSubmitting ? (
                   <>
