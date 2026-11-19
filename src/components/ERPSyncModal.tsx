@@ -48,6 +48,9 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
 
   // Session state from step 1 for step 2 verification
   const [sessionState, setSessionState] = useState<any>(null);
+  const [otpNotice, setOtpNotice] = useState<string>(
+    "A one-time password has been sent by the college ERP to your registered email and mobile number."
+  );
   const [savedSessionCookie, setSavedSessionCookie] = useState<string | null>(null);
   const [savedSessionUser, setSavedSessionUser] = useState<string | null>(null);
 
@@ -208,6 +211,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
       // OTP Dispatched
       if (data.step === "otp_required") {
         setSessionState(data.sessionState);
+        if (data.message) setOtpNotice(data.message);
         setStep("otp");
       }
     } catch (err: any) {
@@ -463,8 +467,8 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                 <KeyRound className="h-4 w-4 text-amber-400 shrink-0" />
                 <span>Verification Code Sent</span>
               </div>
-              <p className="text-[11px] text-zinc-400 leading-normal">
-                A one-time password has been sent by the college ERP to your registered mobile number and email.
+              <p className="text-[11px] text-zinc-300 leading-normal">
+                {otpNotice}
               </p>
             </div>
 

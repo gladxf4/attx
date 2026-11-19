@@ -210,6 +210,9 @@ export async function POST(req: Request) {
       const cleanOtp = otp.trim();
       const state = sessionState || {};
 
+      const submitBtnName = state.submitButtonName || "btnLogin";
+      const submitBtnVal = state.submitButtonValue || "Verify OTP";
+
       const postParams = new URLSearchParams();
       postParams.append("__VIEWSTATE", state.viewstate || "");
       postParams.append("__VIEWSTATEGENERATOR", state.generator || "");
@@ -217,7 +220,7 @@ export async function POST(req: Request) {
       postParams.append("txtuser", state.erpId || erpId || "");
       postParams.append("txtPassword", state.password || password || "");
       postParams.append("txtOTP", cleanOtp);
-      postParams.append("btnOTP", state.btnOtpValue || "Login");
+      postParams.append(submitBtnName, submitBtnVal);
 
       const verifyHeaders: Record<string, string> = {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -259,7 +262,7 @@ export async function POST(req: Request) {
         );
         const errMsg = alertMatch
           ? alertMatch[1].trim()
-          : "Invalid OTP entered. Please check the code received on your phone or email.";
+          : "Invalid OTP entered. Please check the code received on your email or phone.";
         return NextResponse.json({ error: errMsg }, { status: 400 });
       }
 
@@ -389,21 +392,33 @@ export async function POST(req: Request) {
       postHtml.match(/id="__VIEWSTATEGENERATOR"\s+value="([^"]+)"/)?.[1] ||
       generator;
 
-    // Detect the rendered submit button value
-    const btnMatch =
-      postHtml.match(/name=['"]btnOTP['"][^>]+value=['"]([^'"]+)['"]/i) ||
-      postHtml.match(/id=['"]btnOTP['"][^>]+value=['"]([^'"]+)['"]/i);
-    const btnOtpValue = btnMatch ? btnMatch[1] : "Login";
+    // Detect the rendered submit button name & value (typically name="btnLogin" value="Verify OTP")
+    let submitButtonName = "btnLogin";
+    let submitButtonValue = "Verify OTP";
+
+    const submitBtnMatch =
+      postHtml.match(/<input[^>]+type=['"]submit['"][^>]+name=['"](btnLogin|btnOTP|btnVerify)['"][^>]*>/i) ||
+      postHtml.match(/<input[^>]+name=['"](btnLogin|btnOTP|btnVerify)['"][^>]+type=['"]submit['"][^>]*>/i);
+
+    if (submitBtnMatch) {
+      const tag = submitBtnMatch[0];
+      const nameM = tag.match(/name=['"]([^'"]+)['"]/i);
+      const valM = tag.match(/value=['"]([^'"]+)['"]/i);
+      if (nameM) submitButtonName = nameM[1];
+      if (valM) submitButtonValue = valM[1];
+    }
+
+    const erpAlertText = alertMatch ? alertMatch[1].trim() : "OTP has been dispatched by the college ERP to your registered email and mobile number.";
 
     return NextResponse.json({
       step: "otp_required",
-      message:
-        "OTP has been dispatched by the college ERP to your registered mobile number and email.",
+      message: erpAlertText,
       sessionState: {
         viewstate: newViewstate,
         generator: newGenerator,
         cookies: combinedCookies,
-        btnOtpValue,
+        submitButtonName,
+        submitButtonValue,
         erpId: cleanUser,
         password,
       },
