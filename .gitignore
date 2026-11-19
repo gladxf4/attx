@@ -8,3 +8,5 @@ yarn-error.log*
 *.pem
 .vercel
 .env*
+.next-preview
+.claude/launch.json

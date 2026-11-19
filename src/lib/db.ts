@@ -1,7 +1,15 @@
-import { neon } from "@neondatabase/serverless";
+import "server-only";
+import { neon, NeonQueryFunction } from "@neondatabase/serverless";
+import { requireEnv } from "./server/env";
 
-const dbUrl =
-  process.env.NEON_URL ||
-  "postgresql://neondb_owner:npg_Yr52PqOuXSsg@ep-long-butterfly-b3ch30as-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require";
+let client: NeonQueryFunction<false, false> | null = null;
 
-export const sql = neon(dbUrl);
+function getClient() {
+  if (!client) client = neon(requireEnv("NEON_URL"));
+  return client;
+}
+
+/** Lazily-initialised tagged-template client so builds don't need DB secrets. */
+export function sql(strings: TemplateStringsArray, ...values: unknown[]) {
+  return getClient()(strings, ...values) as Promise<Record<string, any>[]>;
+}

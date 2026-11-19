@@ -3,87 +3,185 @@
 @tailwind utilities;
 
 :root {
-  --background: #08090e;
-  --foreground: #f4f4f7;
-  --surface: #0e1017;
-  --surface-elevated: #141722;
-  --card-border: rgba(255, 255, 255, 0.06);
-  --card-border-hover: rgba(255, 255, 255, 0.12);
+  color-scheme: dark;
+  --dock-h: 76px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-  letter-spacing: -0.012em;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+  body {
+    background-color: #07080c;
+    letter-spacing: -0.006em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-[-0.02em];
+  }
+  :focus-visible {
+    outline: 2px solid rgba(90, 169, 255, 0.8);
+    outline-offset: 2px;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  ::selection {
+    background: rgba(47, 140, 255, 0.35);
+  }
 }
 
-/* Atmospheric Obsidian Canvas with deep ambient radial light */
-.apple-canvas {
-  background-color: #08090e;
-  background-image: 
-    radial-gradient(circle at 50% -12%, rgba(56, 80, 160, 0.14) 0%, rgba(9, 10, 15, 0.8) 55%, #06070a 100%),
-    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
-  background-attachment: fixed;
+@layer components {
+  /* Ambient backdrop */
+  .app-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(60rem 30rem at 50% -10%, rgba(47, 140, 255, 0.16), transparent 60%),
+      radial-gradient(40rem 24rem at 100% 0%, rgba(56, 189, 248, 0.06), transparent 60%),
+      radial-gradient(40rem 30rem at 0% 100%, rgba(99, 102, 241, 0.05), transparent 60%),
+      #07080c;
+  }
+
+  .card {
+    @apply relative rounded-3xl border border-white/[0.07] bg-ink-900/80 shadow-card backdrop-blur-xl;
+  }
+  .card-pad {
+    @apply p-5 sm:p-6;
+  }
+  .inset-panel {
+    @apply rounded-2xl border border-white/[0.06] bg-white/[0.025];
+  }
+
+  .eyebrow {
+    @apply text-2xs font-medium uppercase tracking-[0.12em] text-zinc-500;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "ss01" 1;
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-medium transition duration-150 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40;
+    height: 2.5rem;
+  }
+  .btn-sm {
+    @apply h-8 rounded-lg px-3 text-xs;
+  }
+  .btn-lg {
+    @apply h-12 rounded-2xl px-5 text-[0.95rem];
+  }
+  .btn-primary {
+    @apply bg-brand-500 text-white shadow-[0_8px_24px_-8px_rgba(47,140,255,0.7)] hover:bg-brand-400;
+  }
+  .btn-light {
+    @apply bg-white text-ink-950 hover:bg-zinc-200;
+  }
+  .btn-subtle {
+    @apply border border-white/[0.08] bg-white/[0.04] text-zinc-200 hover:border-white/[0.14] hover:bg-white/[0.07];
+  }
+  .btn-ghost {
+    @apply text-zinc-400 hover:bg-white/[0.05] hover:text-white;
+  }
+  .btn-danger {
+    @apply border border-rose-500/20 bg-rose-500/10 text-rose-300 hover:bg-rose-500/15;
+  }
+  .icon-btn {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-zinc-300 transition hover:border-white/[0.14] hover:bg-white/[0.08] hover:text-white active:scale-95;
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-xs font-medium text-zinc-400;
+  }
+  .field {
+    @apply h-11 w-full rounded-xl border border-white/[0.08] bg-ink-950/70 px-3.5 text-base text-white placeholder-zinc-600 transition focus:border-brand-500/60 focus:outline-none focus:ring-4 focus:ring-brand-500/10 sm:text-sm;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium;
+  }
+  .chip-safe {
+    @apply border-emerald-400/20 bg-emerald-400/10 text-emerald-300;
+  }
+  .chip-warn {
+    @apply border-amber-400/20 bg-amber-400/10 text-amber-300;
+  }
+  .chip-danger {
+    @apply border-rose-400/20 bg-rose-400/10 text-rose-300;
+  }
+  .chip-neutral {
+    @apply border-white/[0.08] bg-white/[0.04] text-zinc-300;
+  }
+  .chip-brand {
+    @apply border-brand-400/25 bg-brand-500/10 text-brand-300;
+  }
+
+  .range {
+    @apply h-2 w-full cursor-pointer appearance-none rounded-full bg-white/[0.08];
+  }
+  .range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 22px;
+    width: 22px;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5), 0 0 0 4px rgba(255, 255, 255, 0.08);
+    cursor: grab;
+  }
+  .range::-moz-range-thumb {
+    height: 22px;
+    width: 22px;
+    border: 0;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pb-dock {
+    padding-bottom: calc(var(--dock-h) + var(--safe-b) + 2rem);
+  }
 }
 
-/* Hide native number input spinners */
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-input[type="number"] {
-  -moz-appearance: textfield;
-}
-
-/* Apple Pro Fluid Glass Surfaces */
-.apple-card {
-  background: rgba(14, 16, 23, 0.75);
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
-  border: 1px solid rgba(255, 255, 255, 0.065);
-  border-radius: 22px;
-  box-shadow: 0 20px 48px -16px rgba(0, 0, 0, 0.65), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.apple-card:hover {
-  border-color: rgba(255, 255, 255, 0.11);
-}
-
-.apple-surface {
-  background: rgba(20, 23, 33, 0.65);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-}
-
-.apple-interactive {
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.apple-interactive:hover {
-  transform: translateY(-1px);
-}
-.apple-interactive:active {
-  transform: translateY(0.5px) scale(0.985);
-}
-
-/* Subtle scrollbar */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

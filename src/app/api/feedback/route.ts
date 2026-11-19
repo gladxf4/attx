@@ -1,136 +1,69 @@
 import { NextResponse } from "next/server";
+import { clientIp, rateLimit, tooMany } from "@/lib/server/rateLimit";
 
-const DISCORD_WEBHOOK_URL =
-  process.env.DISCORD_WEBHOOK_URL ||
-  "https://discord.com/api/webhooks/1572938241739464824/JUVzE8fQxF45rPBh6o4azAddhWYKD9ZP1vylPEs-fJdZjxF-_UxDQELXOENIZHTsAshe";
+export const dynamic = "force-dynamic";
 
-// Simple IP-based in-memory rate limiting (max 5 submissions per 5 minutes per IP)
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const TYPES = {
+  feedback: { title: "💬 Feedback", color: 0x3b82f6 },
+  bug: { title: "🐛 Bug report", color: 0xef4444 },
+  feature: { title: "💡 Feature idea", color: 0x8b5cf6 },
+} as const;
+
+function clean(v: unknown, max: number): string {
+  return typeof v === "string" ? v.replace(/[\u0000-\u0008\u000B-\u001F]/g, "").trim().slice(0, max) : "";
+}
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anonymous";
-    const now = Date.now();
-    const rateData = rateLimitMap.get(ip);
+    const ip = clientIp(req);
+    const rl = rateLimit(`feedback:${ip}`, 6, 5 * 60_000);
+    if (!rl.ok) return tooMany(rl.retryAfter);
 
-    if (rateData && now < rateData.resetAt) {
-      if (rateData.count >= 6) {
-        return NextResponse.json(
-          { error: "Too many feedback submissions. Please wait a few minutes." },
-          { status: 429 }
-        );
-      }
-      rateData.count += 1;
-    } else {
-      rateLimitMap.set(ip, { count: 1, resetAt: now + 5 * 60 * 1000 });
+    const webhook = process.env.DISCORD_WEBHOOK_URL;
+    if (!webhook || !webhook.startsWith("https://discord.com/api/webhooks/")) {
+      console.error("feedback: DISCORD_WEBHOOK_URL is not configured");
+      return NextResponse.json({ error: "Feedback is unavailable right now." }, { status: 503 });
     }
 
-    const body = await req.json();
-    const { type = "feedback", message = "", contact, rating, heart, context } = body;
+    const body = await req.json().catch(() => null);
+    const type = (Object.keys(TYPES) as (keyof typeof TYPES)[]).includes(body?.type) ? (body.type as keyof typeof TYPES) : "feedback";
+    const message = clean(body?.message, 2000);
+    const contact = clean(body?.contact, 100).replace(/`/g, "'");
+    const rating = Number.isInteger(body?.rating) && body.rating >= 1 && body.rating <= 5 ? body.rating : null;
+    const heart = body?.heart === true;
+    const mode = body?.context?.userType === "Signed-In User" ? "Signed in" : "Guest";
 
-    const trimmedMsg = typeof message === "string" ? message.trim() : "";
-
-    if (!rating && !heart && trimmedMsg.length < 3) {
-      return NextResponse.json(
-        { error: "Please provide a rating, a heart, or a short message." },
-        { status: 400 }
-      );
-    }
-
-    if (trimmedMsg.length > 2000) {
-      return NextResponse.json(
-        { error: "Message exceeds maximum length of 2000 characters." },
-        { status: 400 }
-      );
-    }
-
-    let color = 0x3b82f6;
-    let title = "💬 AttendX User Feedback";
-    if (type === "bug") {
-      color = 0xef4444;
-      title = "🐛 AttendX Bug Report";
-    } else if (type === "feature") {
-      color = 0x8b5cf6;
-      title = "💡 AttendX Feature Idea";
-    } else if (heart || (rating && rating >= 4)) {
-      color = 0xec4899; // Pink for appreciation
-      title = "❤️ AttendX Rating & Appreciation";
+    if (message.length < 3) {
+      return NextResponse.json({ error: "Please write a short message." }, { status: 400 });
     }
 
     const fields = [
-      {
-        name: "Category",
-        value: type.toUpperCase(),
-        inline: true,
-      },
-      {
-        name: "Rating / Heart",
-        value: `${rating ? "⭐".repeat(rating) : "No stars"} ${heart ? "❤️ Loved it" : ""}`,
-        inline: true,
-      },
-      {
-        name: "User / Contact",
-        value: contact?.trim() ? `\`${contact.trim()}\`` : "*Anonymous Student*",
-        inline: true,
-      },
+      { name: "Type", value: type, inline: true },
+      { name: "Rating", value: `${rating ? "⭐".repeat(rating) : "—"}${heart ? " ❤️" : ""}`, inline: true },
+      { name: "Contact", value: contact ? `\`${contact}\`` : "Anonymous", inline: true },
+      { name: "Mode", value: mode, inline: true },
+      { name: "Message", value: message, inline: false },
     ];
 
-    if (context && typeof context === "object") {
-      const details = [];
-      if (context.attendancePct) details.push(`Official %: ${context.attendancePct}%`);
-      if (context.userType) details.push(`Mode: ${context.userType}`);
-      if (details.length > 0) {
-        fields.push({
-          name: "Session Context",
-          value: details.join(" • "),
-          inline: false,
-        });
-      }
-    }
-
-    if (trimmedMsg) {
-      fields.push({
-        name: "Message",
-        value: trimmedMsg,
-        inline: false,
-      });
-    }
-
-    const discordPayload = {
-      username: "AttendX Feedback",
-      avatar_url: "https://attendx-web.vercel.app/logo.png",
-      embeds: [
-        {
-          title,
-          color,
-          fields,
-          footer: {
-            text: `AttendX Production • IP: ${ip.substring(0, 8)}***`,
-          },
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    };
-
-    const webhookRes = await fetch(DISCORD_WEBHOOK_URL, {
+    const res = await fetch(webhook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(discordPayload),
+      body: JSON.stringify({
+        username: "AttendX Feedback",
+        allowed_mentions: { parse: [] },
+        embeds: [{ title: TYPES[type].title, color: TYPES[type].color, fields, timestamp: new Date().toISOString() }],
+      }),
+      signal: AbortSignal.timeout(10_000),
     });
 
-    if (!webhookRes.ok) {
-      console.error("Discord webhook failed with status:", webhookRes.status);
+    if (!res.ok) {
+      console.error("feedback: webhook responded", res.status);
+      return NextResponse.json({ error: "Couldn't send feedback. Please try again." }, { status: 502 });
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "Feedback submitted successfully! Thank you.",
-    });
-  } catch (err: any) {
-    console.error("Feedback route error:", err);
-    return NextResponse.json(
-      { error: err.message || "Failed to submit feedback." },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("feedback error:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Couldn't send feedback. Please try again." }, { status: 500 });
   }
 }

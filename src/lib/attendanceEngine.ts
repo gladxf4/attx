@@ -1,33 +1,16 @@
-import { AttendanceMetrics, CalendarDayInfo } from "./types";
-
-export const CALENDAR_DAYS_UNTIL_MT2: CalendarDayInfo[] = [
-  { dateStr: "19 Nov", dayName: "Thu (Today)", isWeekend: false, isHoliday: false, isExamDay: false, classesScheduled: 8 },
-  { dateStr: "20 Nov", dayName: "Friday", isWeekend: false, isHoliday: false, isExamDay: false, classesScheduled: 8 },
-  { dateStr: "21 Nov", dayName: "Saturday", isWeekend: true, isHoliday: true, holidayReason: "Weekend", isExamDay: false, classesScheduled: 0 },
-  { dateStr: "22 Nov", dayName: "Sunday", isWeekend: true, isHoliday: true, holidayReason: "Weekend", isExamDay: false, classesScheduled: 0 },
-  { dateStr: "23 Nov", dayName: "Monday", isWeekend: false, isHoliday: false, isExamDay: false, classesScheduled: 8 },
-  { dateStr: "24 Nov", dayName: "Tuesday", isWeekend: false, isHoliday: true, holidayReason: "Holiday (Martyrdom Day)", isExamDay: false, classesScheduled: 0 },
-  { dateStr: "25 Nov", dayName: "Wednesday", isWeekend: false, isHoliday: false, isExamDay: false, classesScheduled: 8 },
-  { dateStr: "26 Nov", dayName: "Thursday", isWeekend: false, isHoliday: false, isExamDay: false, classesScheduled: 8 },
-  { dateStr: "27 Nov", dayName: "Friday", isWeekend: false, isHoliday: false, isExamDay: false, classesScheduled: 8 },
-  { dateStr: "28 Nov", dayName: "Saturday", isWeekend: true, isHoliday: true, holidayReason: "Weekend", isExamDay: false, classesScheduled: 0 },
-  { dateStr: "29 Nov", dayName: "Sunday", isWeekend: true, isHoliday: true, holidayReason: "Weekend", isExamDay: false, classesScheduled: 0 },
-  { dateStr: "30 Nov", dayName: "Monday", isWeekend: false, isHoliday: false, isExamDay: true, holidayReason: "MT2 Starts", classesScheduled: 0 },
-];
-
-export const WORKING_DAYS_SCHEDULE = CALENDAR_DAYS_UNTIL_MT2;
+import { AcademicCalendar, isWorkingDay, upcomingWorkingDays } from "./academicCalendar";
+import { AttendanceInput, AttendanceMetrics, Horizon, PlanMap } from "./types";
 
 export function isLabSubject(code?: string, name?: string): boolean {
   const c = (code || "").trim();
   const n = (name || "").toLowerCase().trim();
 
-  // 1. Subject code rules: ABES practical codes contain '5' in the last 2 digits (e.g. 25CS352 vs 25CS302)
+  // ABES practical codes carry a 5 in the tens place (25CS352 vs 25CS302)
   if (/\d{2}[A-Za-z]{2,4}\d5\d/i.test(c)) return true;
   if (/5\d$/.test(c)) return true;
   if (/L$/i.test(c)) return true;
 
-  // 2. Name keywords: labs, workshops, practicals, cloud, web dev, employability, embedded systems, holistic skill, es
-  if (
+  return (
     n.includes("lab") ||
     n.includes("workshop") ||
     n.includes("cloud") ||
@@ -37,171 +20,134 @@ export function isLabSubject(code?: string, name?: string): boolean {
     n.includes("practical") ||
     n.includes("embedded") ||
     /\bes\b/i.test(n) ||
-    n.includes("oops lab") ||
-    n.includes("os lab") ||
     n.includes("holistic") ||
     n.includes("skill")
-  ) {
-    return true;
-  }
-
-  return false;
+  );
 }
 
-export function getRelativeDateText(targetDateStr: string = "2026-11-18"): string {
-  try {
-    const today = new Date(2026, 10, 19);
-    const base = new Date(2026, 10, 18);
-    const diffTime = today.getTime() - base.getTime();
-    const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
-
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays === 0) return "Today";
-    if (diffDays > 1) return `${diffDays} days ago`;
-    return "18 Nov";
-  } catch {
-    return "18 Nov";
-  }
+export function clampInt(v: unknown, min: number, max: number, fallback = min): number {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
 }
 
-export interface DynamicMT2Horizon {
-  remainingWorkingDaysCount: number;
-  upcomingDates: { dateStr: string; dayNumber: number; dayName: string; dayShort: string; classesScheduled: number }[];
-  totalLecturesRemaining: number;
+/** Converts the three numbers a student reads off the ERP into the official present count. */
+export function officialPresentFrom(held: number, attended: number, officialPct?: number | null): number {
+  const h = Math.max(0, Math.round(held));
+  const a = Math.max(0, Math.min(h, Math.round(attended)));
+  if (officialPct === undefined || officialPct === null || !Number.isFinite(officialPct) || officialPct <= 0) return a;
+  const fromPct = Math.round((Math.min(100, officialPct) / 100) * h);
+  return Math.max(a, Math.min(h, fromPct));
 }
 
-export function getDynamicMT2Horizon(currentDate: Date = new Date()): DynamicMT2Horizon {
-  const masterWorkingSchedule = [
-    { dateStr: "2026-11-20", dayNumber: 20, dayName: "Friday", dayShort: "Fri", classesScheduled: 8 },
-    { dateStr: "2026-11-23", dayNumber: 23, dayName: "Monday", dayShort: "Mon", classesScheduled: 8 },
-    { dateStr: "2026-11-25", dayNumber: 25, dayName: "Wednesday", dayShort: "Wed", classesScheduled: 8 },
-    { dateStr: "2026-11-26", dayNumber: 26, dayName: "Thursday", dayShort: "Thu", classesScheduled: 8 },
-    { dateStr: "2026-11-27", dayNumber: 27, dayName: "Friday", dayShort: "Fri", classesScheduled: 8 },
-  ];
+export function pct(present: number, held: number): number {
+  return held > 0 ? (present / held) * 100 : 0;
+}
 
-  let dayNum = 19;
-  if (currentDate.getFullYear() === 2026 && currentDate.getMonth() === 10) {
-    dayNum = currentDate.getDate();
+export function formatPct(v: number, digits = 2): string {
+  return `${(Math.round(v * 10 ** digits) / 10 ** digits).toFixed(digits)}%`;
+}
+
+/** Remaining lecture slots between now and the cutoff, derived from the real date. */
+export function getHorizon(cal: AcademicCalendar, today: string, todayHeld: number): Horizon {
+  const passed = today >= cal.cutoffDate;
+  const days: Horizon["days"] = [];
+  if (!passed) {
+    if (isWorkingDay(today, cal)) {
+      const remainingToday = Math.max(0, cal.lecturesPerDay - Math.max(0, todayHeld));
+      if (remainingToday > 0) days.push({ date: today, lectures: remainingToday, isToday: true });
+    }
+    for (const d of upcomingWorkingDays(today, cal)) {
+      days.push({ date: d, lectures: cal.lecturesPerDay, isToday: false });
+    }
   }
-
-  const upcoming = masterWorkingSchedule.filter((d) => d.dayNumber > dayNum);
-  const remainingWorkingDaysCount = upcoming.length;
-  const totalLecturesRemaining = remainingWorkingDaysCount * 8;
-
   return {
-    remainingWorkingDaysCount,
-    upcomingDates: upcoming,
-    totalLecturesRemaining,
+    cutoffDate: cal.cutoffDate,
+    cutoffLabel: cal.cutoffLabel,
+    passed,
+    days,
+    lecturesLeft: days.reduce((a, d) => a + d.lectures, 0),
+    workingDaysLeft: days.length,
   };
 }
 
-export function getDynamicBaselineInfo() {
-  return {
-    anchorDateStr: "Wed, 18 Nov",
-    anchorHeldAIML: 421,
-    anchorPresentAIML: 316,
-    anchorOfficialPctAIML: 78.86,
-    currentDateStr: "Thu, 19 Nov",
-    yesterdayDateStr: "Yesterday (18 Nov)",
-    expectedBaselineHeldAIML: 421,
-    erpNoticeText:
-      "ERP records only reflect the latest submissions uploaded by faculty, which may not yet include today’s lectures. Mark today's periods separately below to project your real-time standing.",
-  };
+/** Integer-safe: lectures you can miss while staying >= target. */
+export function safeSkips(present: number, held: number, target: number): number {
+  if (target <= 0) return Number.MAX_SAFE_INTEGER;
+  const slack = 100 * present - target * held;
+  return slack >= 0 ? Math.floor(slack / target) : 0;
 }
 
-export function calculateAttendanceMetrics(
-  totalHeldWed: number,
-  presentWed: number,
-  thursdayHeld: number = 0,
-  thursdayPresent: number = 0,
-  targetPercentage: number = 75,
-  internalFactorBuffer: number = 0,
-  officialBaselinePercentage?: number
-): AttendanceMetrics {
-  const relativeText = getRelativeDateText("2026-11-18");
+/** Integer-safe: consecutive lectures needed to climb back to target. */
+export function lecturesNeeded(present: number, held: number, target: number): number {
+  if (target >= 100) return 100 * present >= target * held ? 0 : Number.POSITIVE_INFINITY;
+  const deficit = target * held - 100 * present;
+  return deficit > 0 ? Math.ceil(deficit / (100 - target)) : 0;
+}
 
-  // Calibrate buffer dynamically if official percentage is supplied
-  let effectiveBuffer = Math.max(0, internalFactorBuffer || 0);
-  if (officialBaselinePercentage !== undefined && officialBaselinePercentage > 0 && totalHeldWed > 0) {
-    const targetOfficialPresent = Math.round((officialBaselinePercentage / 100) * totalHeldWed);
-    effectiveBuffer = Math.max(0, targetOfficialPresent - presentWed);
-  }
+export function computeMetrics(input: AttendanceInput, horizon: Horizon): AttendanceMetrics {
+  const target = clampInt(input.targetPercentage, 50, 100, 75);
+  const totalHeld = Math.max(0, input.baselineHeld) + Math.max(0, input.todayHeld);
+  const totalPresent = Math.min(totalHeld, Math.max(0, input.baselinePresent) + Math.max(0, input.todayPresent));
+  const percentage = pct(totalPresent, totalHeld);
+  const isAboveTarget = totalHeld > 0 && 100 * totalPresent >= target * totalHeld;
 
-  // Baseline
-  const effectiveWedPresent = presentWed + effectiveBuffer;
-  const wednesdayPercentage = totalHeldWed > 0 ? (effectiveWedPresent / totalHeldWed) * 100 : 0;
+  const safeBunks = isAboveTarget ? safeSkips(totalPresent, totalHeld, target) : 0;
+  const classesNeeded = isAboveTarget ? 0 : lecturesNeeded(totalPresent, totalHeld, target);
 
-  // Cumulative current status (including today's tracked periods)
-  const clampedTodayHeld = Math.max(0, Math.min(8, thursdayHeld));
-  const clampedTodayPresent = Math.max(0, Math.min(clampedTodayHeld, thursdayPresent));
+  const L = horizon.lecturesLeft;
+  const finalHeld = totalHeld + L;
+  const requiredPresent = Math.ceil((target * finalHeld) / 100);
+  const minToAttend = Math.max(0, requiredPresent - totalPresent);
+  const canReachTarget = minToAttend <= L;
 
-  const currentTotalHeld = totalHeldWed + clampedTodayHeld;
-  const currentAcademicPresent = presentWed + clampedTodayPresent;
-  const currentEffectivePresent = currentAcademicPresent + effectiveBuffer;
-
-  // Raw academic table %
-  const rawPercentage = currentTotalHeld > 0 ? (currentAcademicPresent / currentTotalHeld) * 100 : 0;
-
-  // Official consolidated attendance %
-  const currentPercentage = currentTotalHeld > 0 ? (currentEffectivePresent / currentTotalHeld) * 100 : 0;
-
-  // Target calculations based on targetPercentage
-  const targetFraction = targetPercentage / 100;
-  let safeBunksRemaining = 0;
-  let classesNeededFor75 = 0;
-
-  if (currentPercentage >= targetPercentage) {
-    const maxBunks = Math.floor((currentEffectivePresent - targetFraction * currentTotalHeld) / targetFraction);
-    safeBunksRemaining = Math.max(0, maxBunks);
-  } else {
-    const needed = Math.ceil((targetFraction * currentTotalHeld - currentEffectivePresent) / (1 - targetFraction));
-    classesNeededFor75 = Math.max(0, needed);
-  }
-
-  const safeDaysBunkable = Math.floor(safeBunksRemaining / 8);
-
-  const remainingToday = Math.max(0, 8 - clampedTodayHeld);
-  const { remainingWorkingDaysCount, totalLecturesRemaining } = getDynamicMT2Horizon();
-  const totalLecturesUntilMT2 = remainingToday + totalLecturesRemaining;
-
-  const finalTotalLectures = currentTotalHeld + totalLecturesUntilMT2;
-  const requiredEffectivePresent = Math.ceil(targetFraction * finalTotalLectures);
-  const minClassesToAttendBeforeMT2 = Math.max(0, requiredEffectivePresent - currentEffectivePresent);
-
-  let statusTier: "safe" | "caution" | "critical" = "safe";
-  if (currentPercentage < targetPercentage) {
-    statusTier = "critical";
-  } else if (currentPercentage - targetPercentage < 2.0) {
-    statusTier = "caution";
-  }
+  let statusTier: AttendanceMetrics["statusTier"] = "safe";
+  if (!isAboveTarget) statusTier = "critical";
+  else if (percentage - target < 2) statusTier = "caution";
 
   return {
-    wednesdayHeld: totalHeldWed,
-    wednesdayPresent: presentWed,
-    wednesdayPercentage: Number(wednesdayPercentage.toFixed(2)),
-    baselineDateStr: "18 Nov 2026",
-    baselineRelativeText: relativeText,
-
-    thursdayHeld: clampedTodayHeld,
-    thursdayPresent: clampedTodayPresent,
-
-    currentTotalHeld,
-    currentTotalPresent: currentEffectivePresent,
-    currentPercentage: Number(currentPercentage.toFixed(2)),
-    rawPercentage: Number(rawPercentage.toFixed(2)),
-    concessionBuffer: effectiveBuffer,
-
-    targetPercentage,
-    isEligibleForMT2: currentPercentage >= targetPercentage,
-    safeBunksRemaining,
-    safeDaysBunkable,
-    classesNeededFor75,
-
-    workingDaysUntilMT2: remainingWorkingDaysCount + (remainingToday > 0 ? 1 : 0),
-    totalLecturesUntilMT2,
-    minClassesToAttendBeforeMT2,
-
+    totalHeld,
+    totalPresent,
+    percentage,
+    targetPercentage: target,
+    isAboveTarget,
+    safeBunks,
+    classesNeeded,
     statusTier,
-    hasERPInitialized: totalHeldWed > 0,
+    lecturesLeft: L,
+    workingDaysLeft: horizon.workingDaysLeft,
+    minToAttend: Math.min(minToAttend, L),
+    canReachTarget,
+    maxSkipsBeforeCutoff: canReachTarget ? L - minToAttend : 0,
+    projectedIfAllAttended: pct(totalPresent + L, finalHeld),
+  };
+}
+
+/** Projection at the cutoff for a day-by-day plan. Days marked off hold no lectures. */
+export function projectPlan(metrics: AttendanceMetrics, horizon: Horizon, plan: PlanMap) {
+  let held = 0;
+  let attended = 0;
+  let offDays = 0;
+  for (const d of horizon.days) {
+    const entry = plan[d.date];
+    if (entry?.off) {
+      offDays++;
+      continue;
+    }
+    held += d.lectures;
+    attended += clampInt(entry?.attend ?? d.lectures, 0, d.lectures);
+  }
+  const finalHeld = metrics.totalHeld + held;
+  const finalPresent = metrics.totalPresent + attended;
+  const finalPct = pct(finalPresent, finalHeld);
+  return {
+    held,
+    attended,
+    skipped: held - attended,
+    offDays,
+    finalHeld,
+    finalPresent,
+    finalPct,
+    isEligible: finalHeld > 0 && 100 * finalPresent >= metrics.targetPercentage * finalHeld,
   };
 }

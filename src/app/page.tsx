@@ -1,563 +1,481 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, AlertCircle, X, RotateCw } from "lucide-react";
-import { Navbar } from "@/components/Navbar";
-import { AttendanceHero } from "@/components/AttendanceHero";
-import { BunkCalculatorCard } from "@/components/BunkCalculatorCard";
-import { TodayPeriodTracker } from "@/components/TodayPeriodTracker";
-import { AttendanceCalendarView } from "@/components/AttendanceCalendarView";
-import { EditBaselineModal } from "@/components/EditBaselineModal";
-import { SubjectAuditModal } from "@/components/SubjectAuditModal";
-import { ERPSyncModal } from "@/components/ERPSyncModal";
-import { FeedbackModal } from "@/components/FeedbackModal";
-import { GuestOnboarding } from "@/components/GuestOnboarding";
-import { UserProfile, AttendanceMetrics, SubjectRecord, DatewiseSubjectLog } from "@/lib/types";
-import { calculateAttendanceMetrics } from "@/lib/attendanceEngine";
-import { getTodayErpRecords } from "@/lib/calendarData";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertCircle, CheckCircle2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TopBar } from "@/components/shell/TopBar";
+import { Dock, Tab, TABS } from "@/components/shell/Dock";
+import { Brand, Credits } from "@/components/ui/Brand";
+import { Sheet } from "@/components/ui/Sheet";
+import { Onboarding } from "@/components/Onboarding";
+import { OverviewView } from "@/components/views/OverviewView";
+import { TodayView } from "@/components/views/TodayView";
+import { PlannerView } from "@/components/views/PlannerView";
+import { SubjectsView } from "@/components/views/SubjectsView";
+import { CalendarSheet } from "@/components/views/CalendarSheet";
+import { ErpSheet } from "@/components/sheets/ErpSheet";
+import { SettingsSheet } from "@/components/sheets/SettingsSheet";
+import { FeedbackSheet } from "@/components/sheets/FeedbackSheet";
+import { AuthForm, AuthResult } from "@/components/sheets/AuthForm";
+import { CalendarPrefs, holidayReason, resolveCalendar } from "@/lib/academicCalendar";
+import { computeMetrics, getHorizon, officialPresentFrom } from "@/lib/attendanceEngine";
+import { isoDateInCollegeTz, todayISO } from "@/lib/dates";
+import { clearErpSession, ErpSyncResult, loadErpSession, refreshErp } from "@/lib/erpClient";
+import { getErpDay, sumLogs } from "@/lib/schedule";
+import { AttendanceInput, DatewiseMap, PlanMap, SessionUser, SubjectRecord } from "@/lib/types";
+
+const K = {
+  token: "attendx_token",
+  cache: "attendx_cache_v2",
+  guest: "attendx_guest_v2",
+  subjects: "attendx_subjects",
+  datewise: "attendx_datewise_erp",
+  prefs: "attendx_prefs_v1",
+  plan: "attendx_plan_v1",
+};
+const LEGACY = ["attendx_cached_user", "attendx_cached_metrics", "attendx_guest_data"];
+
+function readJSON<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+function writeJSON(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // storage full or blocked
+  }
+}
+function removeKeys(...keys: string[]) {
+  try {
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // ignore
+  }
+}
+
+/** Moves yesterday's "today" numbers into the baseline when the date changes. */
+function rollover(att: AttendanceInput, subjects: SubjectRecord[], fromDate: string | null, today: string) {
+  if (!fromDate || fromDate >= today || (att.todayHeld === 0 && !subjects.some((s) => s.todayHeld))) {
+    return { att, subjects, rolled: false };
+  }
+  return {
+    att: {
+      ...att,
+      baselineHeld: att.baselineHeld + att.todayHeld,
+      baselinePresent: att.baselinePresent + att.todayPresent,
+      todayHeld: 0,
+      todayPresent: 0,
+    },
+    subjects: subjects.map((s) => ({ ...s, todayHeld: 0, todayPresent: 0 })),
+    rolled: true,
+  };
+}
+
+function migrateLegacyGuest(): AttendanceInput | null {
+  const g = readJSON<any>("attendx_guest_data");
+  if (!g || !(Number(g.totalHeld) > 0)) return null;
+  const held = Math.round(Number(g.totalHeld));
+  const attended = Math.round(Number(g.academicPresent) || 0);
+  const credited = Math.min(held, attended + Math.max(0, Math.round(Number(g.concessionBuffer) || 0)));
+  return {
+    baselineHeld: held,
+    baselinePresent: g.officialPercentage ? officialPresentFrom(held, attended, Number(g.officialPercentage)) : credited,
+    todayHeld: Math.max(0, Math.round(Number(g.thursdayHeld) || 0)),
+    todayPresent: Math.max(0, Math.round(Number(g.thursdayPresent) || 0)),
+    targetPercentage: Number(g.targetPercentage) || 75,
+  };
+}
+
+type SheetId = null | "erp" | "settings" | "feedback" | "calendar" | "auth";
 
 export default function Home() {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [metrics, setMetrics] = useState<AttendanceMetrics | null>(null);
+  const [today, setToday] = useState<string>(() => todayISO());
+  const [phase, setPhase] = useState<"loading" | "onboarding" | "app">("loading");
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [att, setAtt] = useState<AttendanceInput | null>(null);
   const [subjects, setSubjects] = useState<SubjectRecord[]>([]);
-  const [erpDatewise, setErpDatewise] = useState<Record<string, DatewiseSubjectLog[]>>({});
-  const [hasData, setHasData] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncNotice, setSyncNotice] = useState<{
-    text: string;
-    type: "success" | "warning" | "info";
-  } | null>(null);
+  const [datewise, setDatewise] = useState<DatewiseMap>({});
+  const [prefs, setPrefs] = useState<CalendarPrefs>({});
+  const [plan, setPlan] = useState<PlanMap>({});
+  const [tab, setTabState] = useState<Tab>("overview");
+  const [syncing, setSyncing] = useState(false);
+  const [erpConnected, setErpConnected] = useState(false);
+  const [sheet, setSheet] = useState<SheetId>(null);
+  const [notice, setNotice] = useState<{ text: string; type: "success" | "warning" } | null>(null);
 
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSubjectsOpen, setIsSubjectsOpen] = useState(false);
-  const [isSyncOpen, setIsSyncOpen] = useState(false);
-  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const attRef = useRef(att);
+  const subjectsRef = useRef(subjects);
+  const userRef = useRef(user);
+  const todayRef = useRef(today);
+  const datewiseRef = useRef(datewise);
+  const phaseRef = useRef(phase);
+  attRef.current = att;
+  subjectsRef.current = subjects;
+  userRef.current = user;
+  todayRef.current = today;
+  datewiseRef.current = datewise;
+  phaseRef.current = phase;
 
-  const saveDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const noticeTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const periodTrackerRef = useRef<HTMLDivElement>(null);
-  const calendarRef = useRef<HTMLDivElement>(null);
-  const [activeCalendarDate, setActiveCalendarDate] = useState<string | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showNotice = (text: string, type: "success" | "warning" | "info" = "info", duration = 4000) => {
-    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-    setSyncNotice({ text, type });
-    if (duration > 0) {
-      noticeTimerRef.current = setTimeout(() => {
-        setSyncNotice(null);
-      }, duration);
-    }
-  };
+  const cal = useMemo(() => resolveCalendar(prefs), [prefs]);
 
-  const handleOpenTodayDetail = () => {
-    setActiveCalendarDate("2026-11-19");
-    if (calendarRef.current) {
-      calendarRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
-
-  // 1. Instant 0ms synchronous local hydration from localStorage
-  useEffect(() => {
-    let localDataFound = false;
-    const token = localStorage.getItem("attendx_token");
-
-    try {
-      const storedDatewise = localStorage.getItem("attendx_datewise_erp");
-      if (storedDatewise) {
-        try {
-          setErpDatewise(JSON.parse(storedDatewise));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      const storedSubs = localStorage.getItem("attendx_subjects");
-      if (storedSubs) {
-        try {
-          setSubjects(JSON.parse(storedSubs));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      // Check cached session for signed-in user to prevent flashing Guest mode
-      const cachedUser = localStorage.getItem("attendx_cached_user");
-      const cachedMetrics = localStorage.getItem("attendx_cached_metrics");
-      if (token && cachedUser && cachedMetrics) {
-        try {
-          setUser(JSON.parse(cachedUser));
-          setMetrics(JSON.parse(cachedMetrics));
-          setHasData(true);
-          localDataFound = true;
-        } catch (e) {
-          console.error("Cached session parse error:", e);
-        }
-      }
-
-      // Check for cached guest baseline if no token
-      if (!token) {
-        const savedGuest = localStorage.getItem("attendx_guest_data");
-        if (savedGuest) {
-          try {
-            const parsed = JSON.parse(savedGuest);
-            const todayLogs = getTodayErpRecords(storedDatewise ? JSON.parse(storedDatewise) : {});
-            const todayErpHeld = todayLogs.reduce((acc, l) => acc + (l.held || 1), 0);
-            const todayErpPresent = todayLogs.reduce(
-              (acc, l) => acc + (l.present !== undefined ? l.present : l.status === "P" ? (l.held || 1) : 0),
-              0
-            );
-            const effectiveHeld = parsed.thursdayHeld !== undefined && parsed.thursdayHeld > 0 ? parsed.thursdayHeld : todayErpHeld;
-            const effectivePres = parsed.thursdayPresent !== undefined && parsed.thursdayPresent > 0 ? parsed.thursdayPresent : todayErpPresent;
-
-            const synchronousMetrics = calculateAttendanceMetrics(
-              parsed.totalHeld,
-              parsed.academicPresent,
-              effectiveHeld,
-              effectivePres,
-              parsed.targetPercentage || 75,
-              parsed.concessionBuffer,
-              parsed.officialPercentage
-            );
-            setMetrics(synchronousMetrics);
-            setHasData(true);
-            localDataFound = true;
-          } catch (e) {
-            console.error("Local metrics parse error:", e);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Local storage access error:", err);
-    }
-
-    if (localDataFound) {
-      setIsLoading(false);
-    } else if (!token) {
-      // Neither token nor guest data exists
-      setIsLoading(false);
-      setHasData(false);
-    }
-    // If token exists but no cached metrics yet, keep isLoading true until triggerBackgroundSync resolves
-
-    triggerBackgroundSync(localDataFound);
+  const showNotice = useCallback((text: string, type: "success" | "warning" = "success", ms = 3500) => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    setNotice({ text, type });
+    noticeTimer.current = setTimeout(() => setNotice(null), ms);
   }, []);
 
-  const triggerBackgroundSync = async (hasLocalData: boolean) => {
-    try {
-      const token = localStorage.getItem("attendx_token");
-      if (token) {
-        try {
-          const res = await fetch("/api/auth/me", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data?.user) {
-              setUser(data.user);
-              localStorage.setItem("attendx_cached_user", JSON.stringify(data.user));
-              if (data.user?.custom_subjects && Array.isArray(data.user.custom_subjects) && data.user.custom_subjects.length > 0) {
-                setSubjects(data.user.custom_subjects);
-              }
-              if (data.metrics) {
-                setMetrics(data.metrics);
-                localStorage.setItem("attendx_cached_metrics", JSON.stringify(data.metrics));
-                setHasData(true);
-              }
-            }
-          } else {
-            localStorage.removeItem("attendx_token");
-            localStorage.removeItem("attendx_cached_user");
-            localStorage.removeItem("attendx_cached_metrics");
-            setUser(null);
-            setHasData(false);
-          }
-        } catch (e) {
-          console.error("Background auth error:", e);
-        } finally {
-          setIsLoading(false);
-        }
-      }
-
-      // Quiet ERP background synchronization
-      const storedSession = localStorage.getItem("attendx_erp_session");
-      if (!storedSession) return;
-
-      const session = JSON.parse(storedSession);
-      if (!session?.cookie) return;
-
-      setIsSyncing(true);
-
-      const res = await fetch("/api/erp/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "refresh_session",
-          erpSessionCookie: session.cookie,
-          erpId: session.erpId || "",
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.totalHeld && data.academicPresent) {
-          handleImportFromERP(
-            Number(data.totalHeld),
-            Number(data.academicPresent),
-            Number(data.concessionBuffer || 0),
-            data.officialPercentage ? Number(data.officialPercentage) : undefined,
-            data.subjects,
-            data.datewiseAttendance
-          );
-          showNotice("Attendance records synchronized with ERP", "success", 3000);
-        }
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        if (errData.expired) {
-          localStorage.removeItem("attendx_erp_session");
-          showNotice("ERP session expired. Tap Sync ERP to reconnect", "warning", 6000);
-        }
-      }
-    } catch (err) {
-      console.error("Auto ERP background sync error:", err);
-    } finally {
-      setIsSyncing(false);
-      setIsLoading(false);
-    }
-  };
-
-  const handleCompleteGuest = async (data: {
-    totalHeld: number;
-    academicPresent: number;
-    thursdayHeld: number;
-    thursdayPresent: number;
-    targetPercentage: number;
-    concessionBuffer?: number;
-    officialPercentage?: number;
-  }) => {
-    localStorage.setItem("attendx_guest_data", JSON.stringify(data));
-    try {
-      const calcRes = await fetch("/api/calculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (calcRes.ok) {
-        const calcData = await calcRes.json();
-        setMetrics(calcData.metrics);
-        setHasData(true);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleLoginSuccess = (token: string, newUser: UserProfile) => {
-    localStorage.setItem("attendx_token", token);
-    setUser(newUser);
-    fetch("/api/auth/me", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.user?.custom_subjects && Array.isArray(d.user.custom_subjects) && d.user.custom_subjects.length > 0) {
-          setSubjects(d.user.custom_subjects);
-        }
-        if (d.metrics) {
-          setMetrics(d.metrics);
-          setHasData(true);
-        }
-      });
-  };
-
-  const handleReset = () => {
-    localStorage.removeItem("attendx_token");
-    localStorage.removeItem("attendx_guest_data");
-    localStorage.removeItem("attendx_subjects");
-    localStorage.removeItem("attendx_erp_session");
-    localStorage.removeItem("attendx_datewise_erp");
+  const signOutLocal = useCallback(() => {
+    removeKeys(...Object.values(K), ...LEGACY);
+    clearErpSession();
     setUser(null);
-    setMetrics(null);
+    setAtt(null);
     setSubjects([]);
-    setErpDatewise({});
-    setHasData(false);
-  };
+    setDatewise({});
+    setPlan({});
+    setErpConnected(false);
+    setSheet(null);
+    setPhase("onboarding");
+  }, []);
 
-  const handleSaveSettings = async (data: {
-    totalHeld: number;
-    academicPresent: number;
-    thursdayHeld: number;
-    thursdayPresent: number;
-    targetPercentage: number;
-    concessionBuffer?: number;
-    custom_subjects?: SubjectRecord[];
-  }) => {
-    const token = localStorage.getItem("attendx_token");
-    const bufferVal = data.concessionBuffer !== undefined ? data.concessionBuffer : (metrics?.concessionBuffer || 0);
-    const subList = data.custom_subjects !== undefined ? data.custom_subjects : subjects;
-
-    if (token) {
+  const putAttendance = useCallback(
+    async (token: string, a: AttendanceInput, subs: SubjectRecord[]) => {
       try {
         const res = await fetch("/api/attendance", {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            ...data,
-            factorBuffer: bufferVal,
-            custom_subjects: subList,
-          }),
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ ...a, subjects: subs }),
         });
-        if (res.ok) {
-          const resData = await res.json();
-          setUser(resData.user);
-          if (!saveDebounceTimerRef.current && resData.metrics) {
-            setMetrics(resData.metrics);
-          }
-          if (resData.user?.custom_subjects && !saveDebounceTimerRef.current) {
-            setSubjects(resData.user.custom_subjects);
-          }
-          setHasData(true);
+        if (res.status === 401) {
+          removeKeys(K.token, K.cache);
+          setUser(null);
+          writeJSON(K.guest, { attendance: a, date: todayRef.current });
+          showNotice("Your session expired. Sign in again to keep syncing.", "warning", 6000);
         }
-      } catch (err) {
-        console.error("Save settings network error:", err);
+      } catch {
+        // offline: the local cache keeps the change and the next save retries
+      }
+    },
+    [showNotice]
+  );
+
+  const commit = useCallback(
+    (nextAtt: AttendanceInput, nextSubjects: SubjectRecord[] = subjectsRef.current) => {
+      setAtt(nextAtt);
+      setSubjects(nextSubjects);
+      attRef.current = nextAtt;
+      subjectsRef.current = nextSubjects;
+      writeJSON(K.subjects, nextSubjects);
+      let token: string | null = null;
+      try {
+        token = localStorage.getItem(K.token);
+      } catch {}
+      if (token && userRef.current) {
+        writeJSON(K.cache, { user: userRef.current, attendance: nextAtt, date: todayRef.current });
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        const t = token;
+        saveTimer.current = setTimeout(() => putAttendance(t, nextAtt, nextSubjects), 700);
+      } else {
+        writeJSON(K.guest, { attendance: nextAtt, date: todayRef.current });
+      }
+    },
+    [putAttendance]
+  );
+
+  const applyErp = useCallback(
+    (data: ErpSyncResult) => {
+      const dw = data.datewiseAttendance && typeof data.datewiseAttendance === "object" ? data.datewiseAttendance : {};
+      setDatewise(dw);
+      datewiseRef.current = dw;
+      writeJSON(K.datewise, dw);
+
+      const todayLogs = getErpDay(dw, todayRef.current);
+      const t = sumLogs(todayLogs);
+      const onErp = new Set(todayLogs.map((l) => (l.code || "").trim()));
+      const prevManual = new Map(subjectsRef.current.map((s) => [s.code, s]));
+      const base = data.subjects?.length ? data.subjects : subjectsRef.current;
+      // Keep periods the student marked for subjects the ERP hasn't uploaded yet.
+      const subs = base.map((s) => {
+        const prev = prevManual.get(s.code);
+        const keep = prev && !onErp.has((s.code || "").trim());
+        return { ...s, todayHeld: keep ? prev!.todayHeld || 0 : 0, todayPresent: keep ? prev!.todayPresent || 0 : 0 };
+      });
+      const manualHeld = subs.reduce((a, s) => a + (s.todayHeld || 0), 0);
+      const manualPres = subs.reduce((a, s) => a + (s.todayPresent || 0), 0);
+
+      const held = Math.max(0, Math.round(Number(data.totalHeld) || 0) - t.held);
+      const present = Math.max(0, Math.min(held, Math.round(Number(data.officialPresent) || 0) - t.present));
+      commit(
+        {
+          baselineHeld: held,
+          baselinePresent: present,
+          todayHeld: t.held + manualHeld,
+          todayPresent: t.present + manualPres,
+          targetPercentage: attRef.current?.targetPercentage ?? 75,
+        },
+        subs
+      );
+      setErpConnected(true);
+      if (phaseRef.current !== "app") setPhase("app");
+    },
+    [commit]
+  );
+
+  const backgroundErpSync = useCallback(async () => {
+    const session = loadErpSession();
+    if (!session) return;
+    setErpConnected(true);
+    setSyncing(true);
+    const r = await refreshErp(session);
+    setSyncing(false);
+    if (r.ok) {
+      if (r.data.session) writeJSON("attendx_erp_v2", { token: r.data.session, erpId: r.data.erpId || session.erpId });
+      removeKeys("attendx_erp_session");
+      applyErp(r.data);
+      showNotice("Synced with the ERP");
+    } else if (r.expired) {
+      clearErpSession();
+      setErpConnected(false);
+      showNotice("ERP session expired. Tap Connect ERP to sign in again.", "warning", 6000);
+    }
+  }, [applyErp, showNotice]);
+
+  const acceptAuth = useCallback(
+    (r: AuthResult) => {
+      const t = todayRef.current;
+      const rolled = rollover(r.attendance, r.subjects?.length ? r.subjects : subjectsRef.current, isoDateInCollegeTz(r.updatedAt), t);
+      try {
+        localStorage.setItem(K.token, r.token);
+      } catch {}
+      removeKeys(K.guest, ...LEGACY);
+      setUser(r.user);
+      userRef.current = r.user;
+      commit(rolled.att, rolled.subjects);
+      if (rolled.rolled) {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        putAttendance(r.token, rolled.att, rolled.subjects);
+      }
+      return rolled;
+    },
+    [commit, putAttendance]
+  );
+
+  // Hydrate from local storage instantly, then reconcile with the server and ERP.
+  useEffect(() => {
+    const t = todayISO();
+    setToday(t);
+    todayRef.current = t;
+
+    const dw = readJSON<DatewiseMap>(K.datewise) || {};
+    setDatewise(dw);
+    datewiseRef.current = dw;
+    const localSubs = readJSON<SubjectRecord[]>(K.subjects) || [];
+    setPrefs(readJSON<CalendarPrefs>(K.prefs) || {});
+    const savedPlan = readJSON<PlanMap>(K.plan) || {};
+    const prunedPlan = Object.fromEntries(Object.entries(savedPlan).filter(([d]) => d >= t));
+    setPlan(prunedPlan);
+
+    const hash = window.location.hash.replace("#", "") as Tab;
+    if (TABS.some((x) => x.id === hash)) setTabState(hash);
+
+    let token: string | null = null;
+    try {
+      token = localStorage.getItem(K.token);
+    } catch {}
+
+    let ready = false;
+    if (token) {
+      const cache = readJSON<{ user: SessionUser; attendance: AttendanceInput; date: string }>(K.cache);
+      if (cache?.user && cache.attendance) {
+        const r = rollover(cache.attendance, localSubs, cache.date, t);
+        setUser(cache.user);
+        userRef.current = cache.user;
+        setAtt(r.att);
+        setSubjects(r.subjects);
+        attRef.current = r.att;
+        subjectsRef.current = r.subjects;
+        ready = true;
       }
     } else {
-      const guestPayload = { ...data, concessionBuffer: bufferVal };
-      localStorage.setItem("attendx_guest_data", JSON.stringify(guestPayload));
-    }
-  };
-
-  const handleImportFromERP = (
-    held: number,
-    present: number,
-    buffer: number = 0,
-    officialPct?: number,
-    importedSubjects?: SubjectRecord[],
-    datewiseAtt?: Record<string, any[]>
-  ) => {
-    if (datewiseAtt && Object.keys(datewiseAtt).length > 0) {
-      setErpDatewise(datewiseAtt);
-      try {
-        localStorage.setItem("attendx_datewise_erp", JSON.stringify(datewiseAtt));
-      } catch (e) {
-        console.error(e);
+      const guest = readJSON<{ attendance: AttendanceInput; date: string }>(K.guest);
+      const legacy = guest ? null : migrateLegacyGuest();
+      const g = guest ?? (legacy ? { attendance: legacy, date: "2026-11-19" } : null);
+      if (g?.attendance) {
+        const r = rollover(g.attendance, localSubs, g.date, t);
+        setAtt(r.att);
+        setSubjects(r.subjects);
+        attRef.current = r.att;
+        subjectsRef.current = r.subjects;
+        writeJSON(K.guest, { attendance: r.att, date: t });
+        removeKeys(...LEGACY);
+        ready = true;
       }
     }
+    if (ready) setPhase("app");
+    else if (!token) setPhase("onboarding");
 
-    let finalBuffer = buffer;
-    if (officialPct !== undefined && officialPct > 0 && held > 0) {
-      finalBuffer = Math.max(0, Math.round((officialPct / 100) * held) - present);
-    }
-
-    const baseSubjects = importedSubjects && importedSubjects.length > 0 ? importedSubjects : subjects;
-    const cleanedSubjects = baseSubjects.map((s) => ({
-      ...s,
-      todayHeld: 0,
-      todayPresent: 0,
-    }));
-
-    setSubjects(cleanedSubjects);
-    try {
-      localStorage.setItem("attendx_subjects", JSON.stringify(cleanedSubjects));
-    } catch (e) {
-      console.error(e);
-    }
-
-    // Determine today's periods already officially recorded on ERP
-    const todayLogs = getTodayErpRecords(datewiseAtt || erpDatewise);
-    const todayErpHeld = todayLogs.reduce((acc, l) => acc + (l.held || 1), 0);
-    const todayErpPresent = todayLogs.reduce(
-      (acc, l) => acc + (l.present !== undefined ? l.present : l.status === "P" ? (l.held || 1) : 0),
-      0
-    );
-
-    // If held tally already includes today's records (e.g. 426 held vs 421 yesterday), baseline is previous days
-    const baseHeld = Math.max(0, held - todayErpHeld);
-    const basePresent = Math.max(0, present - todayErpPresent);
-
-    const updated = {
-      totalHeld: baseHeld,
-      academicPresent: basePresent,
-      thursdayHeld: todayErpHeld,
-      thursdayPresent: todayErpPresent,
-      targetPercentage: metrics?.targetPercentage ?? 75,
-      concessionBuffer: finalBuffer,
-      officialPercentage: officialPct,
-      custom_subjects: cleanedSubjects,
-    };
-    handleSaveSettings(updated);
-  };
-
-  const handleUpdateTarget = (newTarget: number) => {
-    if (!metrics) return;
-    const updated = {
-      totalHeld: metrics.wednesdayHeld,
-      academicPresent: metrics.wednesdayPresent,
-      thursdayHeld: metrics.thursdayHeld,
-      thursdayPresent: metrics.thursdayPresent,
-      targetPercentage: newTarget,
-      concessionBuffer: metrics.concessionBuffer,
-      custom_subjects: subjects,
-    };
-    handleSaveSettings(updated);
-  };
-
-  const handleUpdateSubjects = (updatedSubjects: SubjectRecord[]) => {
-    setSubjects(updatedSubjects);
-    try {
-      localStorage.setItem("attendx_subjects", JSON.stringify(updatedSubjects));
-    } catch (e) {
-      console.error(e);
-    }
-
-    const todayLogs = getTodayErpRecords(erpDatewise);
-    const todayErpHeld = todayLogs.reduce((acc, l) => acc + (l.held || 1), 0);
-    const todayErpPresent = todayLogs.reduce(
-      (acc, l) => acc + (l.present !== undefined ? l.present : l.status === "P" ? (l.held || 1) : 0),
-      0
-    );
-
-    const userHeld = updatedSubjects.reduce((acc, s) => acc + (s.todayHeld || 0), 0);
-    const userPres = updatedSubjects.reduce((acc, s) => acc + (s.todayPresent || 0), 0);
-
-    const totalHeldToday = todayErpHeld + userHeld;
-    const totalPresentToday = todayErpPresent + userPres;
-
-    if (metrics) {
-      const immediate = calculateAttendanceMetrics(
-        metrics.wednesdayHeld,
-        metrics.wednesdayPresent,
-        totalHeldToday,
-        totalPresentToday,
-        metrics.targetPercentage || 75,
-        metrics.concessionBuffer,
-        metrics.wednesdayPercentage
-      );
-      setMetrics(immediate);
-      localStorage.setItem("attendx_cached_metrics", JSON.stringify(immediate));
-
-      if (saveDebounceTimerRef.current) {
-        clearTimeout(saveDebounceTimerRef.current);
+    (async () => {
+      if (token) {
+        try {
+          const res = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } });
+          if (res.ok) {
+            const data = await res.json();
+            acceptAuth({ token, ...data });
+            setPhase("app");
+          } else if (res.status === 401) {
+            removeKeys(K.token, K.cache);
+            setUser(null);
+            if (attRef.current) {
+              writeJSON(K.guest, { attendance: attRef.current, date: t });
+              showNotice("Your session expired. Sign in again to keep syncing.", "warning", 6000);
+            } else {
+              setPhase("onboarding");
+            }
+          } else if (!ready) {
+            setPhase("onboarding");
+          }
+        } catch {
+          if (!ready) setPhase("onboarding");
+        }
       }
-      saveDebounceTimerRef.current = setTimeout(() => {
-        saveDebounceTimerRef.current = null;
-        handleSaveSettings({
-          totalHeld: metrics.wednesdayHeld,
-          academicPresent: metrics.wednesdayPresent,
-          thursdayHeld: totalHeldToday,
-          thursdayPresent: totalPresentToday,
-          targetPercentage: metrics.targetPercentage || 75,
-          concessionBuffer: metrics.concessionBuffer,
-          custom_subjects: updatedSubjects,
-        });
-      }, 800);
-    }
+      await backgroundErpSync();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Roll the day over if the app stays open past midnight.
+  useEffect(() => {
+    const check = () => {
+      const t = todayISO();
+      if (t === todayRef.current) return;
+      const prev = todayRef.current;
+      todayRef.current = t;
+      setToday(t);
+      if (attRef.current) {
+        const r = rollover(attRef.current, subjectsRef.current, prev, t);
+        if (r.rolled) commit(r.att, r.subjects);
+      }
+    };
+    const id = setInterval(check, 60_000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [commit]);
+
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    try {
+      history.replaceState(null, "", `#${t}`);
+    } catch {}
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const scrollToPeriodTracker = () => {
-    if (periodTrackerRef.current) {
-      periodTrackerRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+  const updatePlan = (p: PlanMap) => {
+    setPlan(p);
+    writeJSON(K.plan, p);
   };
 
-  if (isLoading) {
+  const erpLogs = useMemo(() => getErpDay(datewise, today), [datewise, today]);
+  const erpTotals = useMemo(() => sumLogs(erpLogs), [erpLogs]);
+
+  const updateSubjects = (next: SubjectRecord[]) => {
+    if (!att) return;
+    const mh = next.reduce((a, s) => a + (s.todayHeld || 0), 0);
+    const mp = next.reduce((a, s) => a + (s.todayPresent || 0), 0);
+    commit({ ...att, todayHeld: erpTotals.held + mh, todayPresent: erpTotals.present + mp }, next);
+  };
+
+  // ---------- Render ----------
+
+  if (phase === "loading") {
     return (
-      <div className="min-h-screen apple-canvas flex flex-col items-center justify-center space-y-4">
-        <motion.div
-          initial={{ scale: 0.88, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.25 }}
-          className="relative flex items-center justify-center"
-        >
-          <div className="h-14 w-14 rounded-2xl bg-zinc-900 border border-white/[0.1] p-2.5 flex items-center justify-center shadow-2xl">
-            <img src="/logo.png" alt="AttendX" className="h-full w-full object-contain" />
-          </div>
-          <div className="absolute inset-0 rounded-2xl border border-white/20 animate-ping opacity-20 pointer-events-none" />
-        </motion.div>
-        <div className="flex flex-col items-center space-y-1">
-          <span className="text-sm font-semibold tracking-tight text-white font-sans">
-            AttendX
-          </span>
-          <span className="text-[11px] text-zinc-500 font-mono">
-            Loading workspace...
-          </span>
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-6">
+        <div className="app-backdrop" />
+        <Brand size="lg" />
+        <div className="h-1 w-32 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="h-full w-full animate-shimmer bg-[linear-gradient(90deg,transparent,rgba(90,169,255,0.8),transparent)] bg-[length:200%_100%]" />
         </div>
       </div>
     );
   }
 
-  if (!hasData || !metrics) {
+  const sheets = (
+    <>
+      <ErpSheet open={sheet === "erp"} onClose={() => setSheet(null)} onSynced={applyErp} defaultAdmissionNo={user?.username} />
+      <FeedbackSheet open={sheet === "feedback"} onClose={() => setSheet(null)} defaultContact={user?.username} signedIn={!!user} />
+    </>
+  );
+
+  if (phase === "onboarding" || !att) {
     return (
       <>
-        <GuestOnboarding
-          onCompleteGuest={handleCompleteGuest}
-          onLoginSuccess={handleLoginSuccess}
-          onOpenFeedback={() => setIsFeedbackOpen(true)}
+        <Onboarding
+          today={today}
+          lecturesPerDay={cal.lecturesPerDay}
+          onGuest={(a) => {
+            commit(a, []);
+            setPhase("app");
+          }}
+          onAuth={(r) => {
+            acceptAuth(r);
+            setPhase("app");
+          }}
+          onConnectErp={() => setSheet("erp")}
+          onFeedback={() => setSheet("feedback")}
         />
-        <FeedbackModal
-          isOpen={isFeedbackOpen}
-          onClose={() => setIsFeedbackOpen(false)}
-          defaultContact={user?.username}
-          attendancePct={undefined}
-        />
+        {sheets}
       </>
     );
   }
 
-  const hasERP = metrics.wednesdayHeld > 0 || (user?.totalHeld ?? 0) > 0;
+  const horizon = getHorizon(cal, today, att.todayHeld);
+  const metrics = computeMetrics(att, horizon);
+  const todayTotals = { held: att.todayHeld, present: att.todayPresent };
 
   return (
-    <div className="apple-canvas min-h-screen text-zinc-100 flex flex-col justify-between selection:bg-white/10 selection:text-white">
-      <Navbar
-        user={user}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenSubjects={() => setIsSubjectsOpen(true)}
-        onOpenSync={() => setIsSyncOpen(true)}
-        onOpenFeedback={() => setIsFeedbackOpen(true)}
-        onOpenPeriodTracker={handleOpenTodayDetail}
-        onReset={handleReset}
-        subjectCount={subjects.length}
-        hasERPInitialized={hasERP}
-        isSyncing={isSyncing}
+    <div className="min-h-dvh">
+      <div className="app-backdrop" />
+      <TopBar
+        displayName={user?.name || user?.username || "Guest"}
+        subtitle={user ? user.username : "Saved on this device only"}
+        isGuest={!user}
+        isSyncing={syncing}
+        erpConnected={erpConnected}
+        onSync={() => setSheet("erp")}
+        onCalendar={() => setSheet("calendar")}
+        onSettings={() => setSheet("settings")}
+        onFeedback={() => setSheet("feedback")}
+        onSignOut={signOutLocal}
+        onCreateAccount={() => setSheet("auth")}
       />
 
-      {/* Sync Status Banner */}
       <AnimatePresence>
-        {syncNotice && (
+        {notice && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mx-auto w-full max-w-4xl px-3.5 sm:px-6 pt-2"
+            exit={{ opacity: 0, y: -12 }}
+            className="fixed inset-x-0 top-[calc(4.75rem+var(--safe-t))] z-50 flex justify-center px-4"
           >
             <div
-              className={`flex items-center justify-between px-3.5 py-2 rounded-xl text-xs border backdrop-blur-md ${
-                syncNotice.type === "success"
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
-                  : syncNotice.type === "warning"
-                  ? "bg-amber-500/10 border-amber-500/20 text-amber-300"
-                  : "bg-zinc-900/90 border-white/[0.08] text-zinc-300"
-              }`}
+              role="status"
+              className={
+                "flex max-w-md items-center gap-2.5 rounded-2xl border px-4 py-2.5 text-sm shadow-2xl backdrop-blur-xl " +
+                (notice.type === "success" ? "border-emerald-400/20 bg-emerald-950/80 text-emerald-200" : "border-amber-400/20 bg-amber-950/80 text-amber-200")
+              }
             >
-              <div className="flex items-center space-x-2">
-                {syncNotice.type === "success" ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                ) : syncNotice.type === "warning" ? (
-                  <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                ) : (
-                  <RotateCw className="h-3.5 w-3.5 text-zinc-400 animate-spin shrink-0" />
-                )}
-                <span>{syncNotice.text}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSyncNotice(null)}
-                className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded transition"
-              >
+              {notice.type === "success" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+              <span>{notice.text}</span>
+              <button type="button" onClick={() => setNotice(null)} className="ml-1 text-current opacity-60 hover:opacity-100" aria-label="Dismiss">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -565,125 +483,115 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <main className="mx-auto w-full max-w-4xl px-3.5 sm:px-6 py-4 sm:py-6 space-y-6">
-        {/* Attendance Hero */}
-        <AttendanceHero
-          metrics={metrics}
-          onOpenSync={() => setIsSyncOpen(true)}
-          onOpenTodayDetailModal={handleOpenTodayDetail}
-          onUpdateTarget={handleUpdateTarget}
-          hasERPInitialized={hasERP}
-        />
+      <main className="pb-dock mx-auto max-w-6xl px-4 pt-5 sm:px-6 sm:pt-8">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {tab === "overview" && (
+              <OverviewView
+                metrics={metrics}
+                horizon={horizon}
+                today={today}
+                lecturesPerDay={cal.lecturesPerDay}
+                todayTotals={todayTotals}
+                erpToday={erpTotals}
+                subjects={subjects}
+                erpConnected={erpConnected}
+                onTarget={(v) => commit({ ...att, targetPercentage: v })}
+                onConnect={() => setSheet("erp")}
+                go={setTab}
+              />
+            )}
+            {tab === "today" && (
+              <TodayView
+                today={today}
+                lecturesPerDay={cal.lecturesPerDay}
+                closedReason={holidayReason(today, cal)}
+                erpLogs={erpLogs}
+                erpTotals={erpTotals}
+                todayTotals={todayTotals}
+                subjects={subjects}
+                onUpdateSubjects={updateSubjects}
+                onSetSimpleToday={(h, p) => commit({ ...att, todayHeld: h, todayPresent: Math.min(h, p) })}
+              />
+            )}
+            {tab === "planner" && (
+              <PlannerView
+                metrics={metrics}
+                horizon={horizon}
+                plan={plan}
+                onPlanChange={updatePlan}
+                today={today}
+                datewise={datewise}
+                lecturesPerDay={cal.lecturesPerDay}
+              />
+            )}
+            {tab === "subjects" && (
+              <SubjectsView
+                subjects={subjects}
+                targetPercentage={metrics.targetPercentage}
+                onUpdateSubjects={(s) => commit(att, s)}
+                onConnect={() => setSheet("erp")}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
 
-        {/* Daily Period Tracker (Collapsed by default) */}
-        {subjects.length > 0 && (
-          <div ref={periodTrackerRef} id="today-period-tracker">
-            <TodayPeriodTracker
-              subjects={subjects}
-              erpTodayLogs={getTodayErpRecords(erpDatewise)}
-              onUpdateSubjects={handleUpdateSubjects}
-            />
-          </div>
-        )}
-
-        {/* Attendance Simulator */}
-        <BunkCalculatorCard
-          metrics={metrics}
-          onUpdateTarget={handleUpdateTarget}
-        />
-
-        {/* Datewise Attendance Calendar & What-If Schedule Forecast */}
-        <div ref={calendarRef} id="attendance-calendar-view">
-          <AttendanceCalendarView
-            metrics={metrics}
-            subjects={subjects}
-            erpDatewise={erpDatewise}
-            activeModalDateStr={activeCalendarDate}
-            onCloseModal={() => setActiveCalendarDate(null)}
-            onScrollToPeriodTracker={scrollToPeriodTracker}
-          />
-        </div>
+        <Credits className="mt-12" />
       </main>
 
-      <footer className="w-full border-t border-white/[0.06] py-7 text-xs text-zinc-400 bg-black/20">
-        <div className="mx-auto max-w-4xl px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 text-center sm:text-left">
-            <div className="flex items-center space-x-2">
-              <span className="font-semibold text-zinc-200">AttendX</span>
-              <span className="text-zinc-600">•</span>
-              <span className="text-zinc-400">Precision Attendance</span>
-            </div>
-            <span className="hidden sm:inline text-zinc-600">|</span>
-            <div className="text-zinc-400">
-              Designed & built by{" "}
-              <span className="text-zinc-200 font-medium">Akshat Sinha</span>
-            </div>
-          </div>
+      <Dock tab={tab} onChange={setTab} />
 
-          <div className="flex items-center space-x-4">
-            <a
-              href="https://x.com/gladxf4"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-zinc-400 hover:text-white transition flex items-center space-x-1"
-            >
-              <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-              <span>@gladxf4</span>
-            </a>
-            <a
-              href="https://github.com/gladxf4"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-zinc-400 hover:text-white transition flex items-center space-x-1"
-            >
-              <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
-                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-              </svg>
-              <span>GitHub</span>
-            </a>
-            <span className="text-zinc-600">•</span>
-            <button
-              onClick={() => setIsFeedbackOpen(true)}
-              className="text-zinc-400 hover:text-white transition"
-            >
-              Feedback
-            </button>
-          </div>
-        </div>
-      </footer>
-
-      {/* Modals */}
-      <EditBaselineModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        user={user}
-        metrics={metrics}
-        onSave={handleSaveSettings}
-      />
-
-      <SubjectAuditModal
-        isOpen={isSubjectsOpen}
-        onClose={() => setIsSubjectsOpen(false)}
+      {sheets}
+      <CalendarSheet
+        open={sheet === "calendar"}
+        onClose={() => setSheet(null)}
+        today={today}
+        cal={cal}
+        datewise={datewise}
+        subjects={subjects}
+        plan={plan}
+        todayTotals={todayTotals}
         targetPercentage={metrics.targetPercentage}
-        initialSubjects={subjects}
-        onSaveSubjects={handleUpdateSubjects}
+        onOpenPlanner={() => {
+          setSheet(null);
+          setTab("planner");
+        }}
+        onOpenToday={() => {
+          setSheet(null);
+          setTab("today");
+        }}
       />
-
-      <ERPSyncModal
-        isOpen={isSyncOpen}
-        onClose={() => setIsSyncOpen(false)}
-        onImportNumbers={handleImportFromERP}
-        defaultAdmissionNo={user?.username}
+      <SettingsSheet
+        open={sheet === "settings"}
+        onClose={() => setSheet(null)}
+        attendance={att}
+        cal={cal}
+        hasSubjects={subjects.length > 0}
+        onSave={(a, p) => {
+          commit(a);
+          setPrefs(p);
+          writeJSON(K.prefs, p);
+        }}
       />
-
-      <FeedbackModal
-        isOpen={isFeedbackOpen}
-        onClose={() => setIsFeedbackOpen(false)}
-        defaultContact={user?.username}
-        attendancePct={metrics?.currentPercentage}
-      />
+      <Sheet open={sheet === "auth"} onClose={() => setSheet(null)} size="sm" title="Save with an account" description="Keep your numbers across devices.">
+        <div className="pt-1">
+          <AuthForm
+            initialMode="register"
+            carryOver={{ attendance: att, subjects }}
+            onSuccess={(r, mode) => {
+              acceptAuth(r);
+              setSheet(null);
+              showNotice(mode === "register" ? "Account created" : "Signed in");
+            }}
+          />
+        </div>
+      </Sheet>
     </div>
   );
 }

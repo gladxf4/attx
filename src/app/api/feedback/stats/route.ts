@@ -1,86 +1,59 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { clientIp, rateLimit, tooMany } from "@/lib/server/rateLimit";
+
+export const dynamic = "force-dynamic";
+
+function shape(row: Record<string, any>) {
+  const count = Number(row.ratings_count) || 0;
+  return {
+    likes: Number(row.likes_count) || 0,
+    averageRating: count > 0 ? Number((Number(row.ratings_sum) / count).toFixed(1)) : null,
+    totalRatings: count,
+  };
+}
 
 export async function GET() {
   try {
     const rows = await sql`
-      SELECT likes_count, ratings_sum, ratings_count
-      FROM attendx_feedback_stats
-      WHERE id = 'global'
-      LIMIT 1;
+      SELECT likes_count, ratings_sum, ratings_count FROM attendx_feedback_stats WHERE id = 'global' LIMIT 1
     `;
-    if (rows && rows.length > 0) {
-      const { likes_count, ratings_sum, ratings_count } = rows[0];
-      const avg = ratings_count > 0 ? Number((ratings_sum / ratings_count).toFixed(1)) : 5.0;
-      return NextResponse.json({
-        likes: likes_count,
-        averageRating: avg,
-        totalRatings: ratings_count,
-      });
-    }
-    return NextResponse.json({
-      likes: 148,
-      averageRating: 4.9,
-      totalRatings: 40,
-    });
-  } catch (err: any) {
-    console.error("Error fetching feedback stats:", err);
-    return NextResponse.json({
-      likes: 148,
-      averageRating: 4.9,
-      totalRatings: 40,
-    });
+    if (rows.length === 0) return NextResponse.json({ likes: 0, averageRating: null, totalRatings: 0 });
+    return NextResponse.json(shape(rows[0]));
+  } catch (err) {
+    console.error("feedback stats GET:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Unavailable" }, { status: 503 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { action, rating } = body;
+    const rl = rateLimit(`reaction:${clientIp(req)}`, 5, 10 * 60_000);
+    if (!rl.ok) return tooMany(rl.retryAfter);
 
+    const body = await req.json().catch(() => null);
+    const action = body?.action;
+
+    let rows: Record<string, any>[] = [];
     if (action === "like") {
-      const rows = await sql`
-        UPDATE attendx_feedback_stats
-        SET likes_count = likes_count + 1, updated_at = NOW()
-        WHERE id = 'global'
-        RETURNING likes_count, ratings_sum, ratings_count;
+      rows = await sql`
+        UPDATE attendx_feedback_stats SET likes_count = likes_count + 1, updated_at = NOW()
+        WHERE id = 'global' RETURNING likes_count, ratings_sum, ratings_count
       `;
-      if (rows && rows.length > 0) {
-        const { likes_count, ratings_sum, ratings_count } = rows[0];
-        const avg = ratings_count > 0 ? Number((ratings_sum / ratings_count).toFixed(1)) : 5.0;
-        return NextResponse.json({
-          success: true,
-          likes: likes_count,
-          averageRating: avg,
-          totalRatings: ratings_count,
-        });
-      }
-    } else if (action === "rate" && typeof rating === "number") {
-      const clamped = Math.max(1, Math.min(5, Math.round(rating)));
-      const rows = await sql`
+    } else if (action === "rate" && Number.isInteger(body?.rating) && body.rating >= 1 && body.rating <= 5) {
+      rows = await sql`
         UPDATE attendx_feedback_stats
-        SET ratings_sum = ratings_sum + ${clamped}, ratings_count = ratings_count + 1, updated_at = NOW()
-        WHERE id = 'global'
-        RETURNING likes_count, ratings_sum, ratings_count;
+        SET ratings_sum = ratings_sum + ${body.rating}, ratings_count = ratings_count + 1, updated_at = NOW()
+        WHERE id = 'global' RETURNING likes_count, ratings_sum, ratings_count
       `;
-      if (rows && rows.length > 0) {
-        const { likes_count, ratings_sum, ratings_count } = rows[0];
-        const avg = ratings_count > 0 ? Number((ratings_sum / ratings_count).toFixed(1)) : 5.0;
-        return NextResponse.json({
-          success: true,
-          likes: likes_count,
-          averageRating: avg,
-          totalRatings: ratings_count,
-        });
-      }
+    } else {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
-    return NextResponse.json({ error: "Invalid action or parameters" }, { status: 400 });
-  } catch (err: any) {
-    console.error("Error updating feedback stats:", err);
-    return NextResponse.json(
-      { error: "Failed to update reaction" },
-      { status: 500 }
-    );
+    if (rows.length === 0) return NextResponse.json({ error: "Unavailable" }, { status: 503 });
+    return NextResponse.json({ success: true, ...shape(rows[0]) });
+  } catch (err) {
+    console.error("feedback stats POST:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Unavailable" }, { status: 500 });
   }
 }

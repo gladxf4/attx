@@ -7,6 +7,7 @@ export interface SubjectRecord {
   pct: number;
   needed75: number;
   isLab?: boolean;
+  /** Periods the student marked manually today (not yet on ERP) */
   todayHeld?: number;
   todayPresent?: number;
 }
@@ -20,80 +21,62 @@ export interface DatewiseSubjectLog {
   isLab?: boolean;
 }
 
-export interface DayAttendanceLog {
-  dateStr: string; // "2026-11-19"
-  displayDate: string; // "19 Nov"
-  dayNumber: number; // 19
-  dayName: string; // "Thursday"
-  dayShort: string; // "Thu"
-  isWeekend: boolean;
-  isHoliday: boolean;
-  holidayReason?: string;
-  isToday: boolean;
-  isFuture: boolean;
-  isExamDay: boolean;
-  totalHeld: number;
-  totalPresent: number;
-  records: DatewiseSubjectLog[];
-  isVerifiedERP?: boolean;
-}
+export type DatewiseMap = Record<string, DatewiseSubjectLog[]>;
 
-export interface UserProfile {
+export interface SessionUser {
   id: string;
   username: string;
   name?: string;
-  branch?: string;
-  sem?: string;
-  totalHeld: number;
-  academicPresent: number;
-  officialPercentage?: number;
-  thursdayHeld: number;
-  thursdayPresent: number;
+}
+
+/**
+ * The only attendance numbers the client keeps. `baselinePresent` is already the
+ * official count (whatever the ERP credits), so nothing downstream needs to know
+ * how it was derived.
+ */
+export interface AttendanceInput {
+  baselineHeld: number;
+  baselinePresent: number;
+  todayHeld: number;
+  todayPresent: number;
   targetPercentage: number;
-  custom_subjects?: SubjectRecord[];
+}
+
+export interface HorizonDay {
+  date: string;
+  lectures: number;
+  isToday: boolean;
+}
+
+export interface Horizon {
+  cutoffDate: string;
+  cutoffLabel: string;
+  passed: boolean;
+  days: HorizonDay[];
+  lecturesLeft: number;
+  workingDaysLeft: number;
 }
 
 export interface AttendanceMetrics {
-  // Baseline / ERP Counts
-  wednesdayHeld: number;
-  wednesdayPresent: number;
-  wednesdayPercentage: number;
-  baselineDateStr: string;
-  baselineRelativeText: string;
-
-  // Today's classes
-  thursdayHeld: number;
-  thursdayPresent: number;
-
-  // Cumulative status
-  currentTotalHeld: number;
-  currentTotalPresent: number;
-  currentPercentage: number; // Official consolidated %
-  rawPercentage: number; // Subject table raw %
-  concessionBuffer: number;
-
-  // Target & Bunking Metrics
+  totalHeld: number;
+  totalPresent: number;
+  percentage: number;
   targetPercentage: number;
-  isEligibleForMT2: boolean;
-  safeBunksRemaining: number;
-  safeDaysBunkable: number;
-  classesNeededFor75: number;
-
-  // MT2 Horizon (Exams begin Nov 30)
-  workingDaysUntilMT2: number;
-  totalLecturesUntilMT2: number;
-  minClassesToAttendBeforeMT2: number;
-
+  isAboveTarget: boolean;
+  safeBunks: number;
+  classesNeeded: number;
   statusTier: "safe" | "caution" | "critical";
-  hasERPInitialized?: boolean;
+
+  lecturesLeft: number;
+  workingDaysLeft: number;
+  minToAttend: number;
+  canReachTarget: boolean;
+  maxSkipsBeforeCutoff: number;
+  projectedIfAllAttended: number;
 }
 
-export interface CalendarDayInfo {
-  dateStr: string;
-  dayName: string;
-  isWeekend: boolean;
-  isHoliday: boolean;
-  holidayReason?: string;
-  isExamDay: boolean;
-  classesScheduled: number;
+export interface PlanEntry {
+  attend: number;
+  off?: boolean;
 }
+export type PlanMap = Record<string, PlanEntry>;
