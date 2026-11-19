@@ -25,7 +25,8 @@ interface ERPSyncModalProps {
     held: number,
     present: number,
     buffer?: number,
-    officialPct?: number
+    officialPct?: number,
+    subjects?: any[]
   ) => void;
   defaultAdmissionNo?: string;
 }
@@ -125,7 +126,8 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
         Number(data.totalHeld),
         Number(data.academicPresent),
         Number(data.concessionBuffer || 0),
-        data.officialPercentage ? Number(data.officialPercentage) : undefined
+        data.officialPercentage ? Number(data.officialPercentage) : undefined,
+        data.subjects
       );
       onClose();
     }, 700);

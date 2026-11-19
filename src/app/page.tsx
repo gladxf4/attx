@@ -1,20 +1,22 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Navbar } from "@/components/Navbar";
 import { AttendanceHero } from "@/components/AttendanceHero";
 import { BunkCalculatorCard } from "@/components/BunkCalculatorCard";
+import { TodayPeriodTracker } from "@/components/TodayPeriodTracker";
 import { MT2CalendarView } from "@/components/MT2CalendarView";
 import { EditBaselineModal } from "@/components/EditBaselineModal";
 import { SubjectAuditModal } from "@/components/SubjectAuditModal";
 import { ERPSyncModal } from "@/components/ERPSyncModal";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { GuestOnboarding } from "@/components/GuestOnboarding";
-import { UserProfile, AttendanceMetrics } from "@/lib/types";
+import { UserProfile, AttendanceMetrics, SubjectRecord } from "@/lib/types";
 
 export default function Home() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [metrics, setMetrics] = useState<AttendanceMetrics | null>(null);
+  const [subjects, setSubjects] = useState<SubjectRecord[]>([]);
   const [hasData, setHasData] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -22,6 +24,8 @@ export default function Home() {
   const [isSubjectsOpen, setIsSubjectsOpen] = useState(false);
   const [isSyncOpen, setIsSyncOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+
+  const periodTrackerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -34,6 +38,21 @@ export default function Home() {
           if (res.ok) {
             const data = await res.json();
             setUser(data.user);
+
+            // Load subjects if returned from db or localStorage
+            if (data.user?.custom_subjects && Array.isArray(data.user.custom_subjects) && data.user.custom_subjects.length > 0) {
+              setSubjects(data.user.custom_subjects);
+            } else {
+              const storedSubs = localStorage.getItem("attendx_subjects");
+              if (storedSubs) {
+                try {
+                  setSubjects(JSON.parse(storedSubs));
+                } catch (e) {
+                  console.error(e);
+                }
+              }
+            }
+
             if (data.metrics) {
               setMetrics(data.metrics);
               setHasData(true);
@@ -49,6 +68,15 @@ export default function Home() {
         const savedGuest = localStorage.getItem("attendx_guest_data");
         if (savedGuest) {
           const parsed = JSON.parse(savedGuest);
+          const storedSubs = localStorage.getItem("attendx_subjects");
+          if (storedSubs) {
+            try {
+              setSubjects(JSON.parse(storedSubs));
+            } catch (e) {
+              console.error(e);
+            }
+          }
+
           const calcRes = await fetch("/api/calculate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -83,6 +111,7 @@ export default function Home() {
     thursdayPresent: number;
     targetPercentage: number;
     concessionBuffer?: number;
+    officialPercentage?: number;
   }) => {
     localStorage.setItem("attendx_guest_data", JSON.stringify(data));
     try {
@@ -109,6 +138,9 @@ export default function Home() {
     })
       .then((r) => r.json())
       .then((d) => {
+        if (d.user?.custom_subjects && Array.isArray(d.user.custom_subjects) && d.user.custom_subjects.length > 0) {
+          setSubjects(d.user.custom_subjects);
+        }
         if (d.metrics) {
           setMetrics(d.metrics);
           setHasData(true);
@@ -119,8 +151,11 @@ export default function Home() {
   const handleReset = () => {
     localStorage.removeItem("attendx_token");
     localStorage.removeItem("attendx_guest_data");
+    localStorage.removeItem("attendx_subjects");
+    localStorage.removeItem("attendx_erp_session");
     setUser(null);
     setMetrics(null);
+    setSubjects([]);
     setHasData(false);
   };
 
@@ -131,9 +166,11 @@ export default function Home() {
     thursdayPresent: number;
     targetPercentage: number;
     concessionBuffer?: number;
+    custom_subjects?: SubjectRecord[];
   }) => {
     const token = localStorage.getItem("attendx_token");
     const bufferVal = data.concessionBuffer !== undefined ? data.concessionBuffer : (metrics?.concessionBuffer || 0);
+    const subList = data.custom_subjects !== undefined ? data.custom_subjects : subjects;
 
     if (token) {
       const res = await fetch("/api/attendance", {
@@ -145,12 +182,16 @@ export default function Home() {
         body: JSON.stringify({
           ...data,
           factorBuffer: bufferVal,
+          custom_subjects: subList,
         }),
       });
       if (res.ok) {
         const resData = await res.json();
         setUser(resData.user);
         setMetrics(resData.metrics);
+        if (resData.user?.custom_subjects) {
+          setSubjects(resData.user.custom_subjects);
+        }
         setHasData(true);
       }
     } else {
@@ -168,11 +209,27 @@ export default function Home() {
     }
   };
 
-  const handleImportFromERP = (held: number, present: number, buffer: number = 0, officialPct?: number) => {
+  const handleImportFromERP = (
+    held: number,
+    present: number,
+    buffer: number = 0,
+    officialPct?: number,
+    importedSubjects?: SubjectRecord[]
+  ) => {
     let finalBuffer = buffer;
     if (officialPct !== undefined && officialPct > 0 && held > 0) {
       finalBuffer = Math.max(0, Math.round((officialPct / 100) * held) - present);
     }
+
+    if (importedSubjects && importedSubjects.length > 0) {
+      setSubjects(importedSubjects);
+      try {
+        localStorage.setItem("attendx_subjects", JSON.stringify(importedSubjects));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     const updated = {
       totalHeld: held,
       academicPresent: present,
@@ -181,14 +238,76 @@ export default function Home() {
       targetPercentage: metrics?.targetPercentage ?? 75,
       concessionBuffer: finalBuffer,
       officialPercentage: officialPct,
+      custom_subjects: importedSubjects || subjects,
     };
     handleSaveSettings(updated);
+  };
+
+  // Update target threshold (e.g. 75, 80, 85)
+  const handleUpdateTarget = (newTarget: number) => {
+    if (!metrics) return;
+    const updated = {
+      totalHeld: metrics.wednesdayHeld,
+      academicPresent: metrics.wednesdayPresent,
+      thursdayHeld: metrics.thursdayHeld,
+      thursdayPresent: metrics.thursdayPresent,
+      targetPercentage: newTarget,
+      concessionBuffer: metrics.concessionBuffer,
+      custom_subjects: subjects,
+    };
+    handleSaveSettings(updated);
+  };
+
+  // Today Period Tracker: update individual periods and totals
+  const handleUpdateTodayTotals = (held: number, present: number) => {
+    if (!metrics) return;
+    const updated = {
+      totalHeld: metrics.wednesdayHeld,
+      academicPresent: metrics.wednesdayPresent,
+      thursdayHeld: held,
+      thursdayPresent: present,
+      targetPercentage: metrics.targetPercentage || 75,
+      concessionBuffer: metrics.concessionBuffer,
+      custom_subjects: subjects,
+    };
+    handleSaveSettings(updated);
+  };
+
+  const handleUpdateSubjects = (updatedSubjects: SubjectRecord[]) => {
+    setSubjects(updatedSubjects);
+    try {
+      localStorage.setItem("attendx_subjects", JSON.stringify(updatedSubjects));
+    } catch (e) {
+      console.error(e);
+    }
+
+    const newHeld = updatedSubjects.reduce((acc, s) => acc + (s.todayHeld || 0), 0);
+    const newPres = updatedSubjects.reduce((acc, s) => acc + (s.todayPresent || 0), 0);
+
+    if (metrics) {
+      const updated = {
+        totalHeld: metrics.wednesdayHeld,
+        academicPresent: metrics.wednesdayPresent,
+        thursdayHeld: newHeld,
+        thursdayPresent: newPres,
+        targetPercentage: metrics.targetPercentage || 75,
+        concessionBuffer: metrics.concessionBuffer,
+        custom_subjects: updatedSubjects,
+      };
+      handleSaveSettings(updated);
+    }
+  };
+
+  const scrollToPeriodTracker = () => {
+    if (periodTrackerRef.current) {
+      periodTrackerRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-zinc-500 text-xs font-mono">
-        Loading...
+        Loading AttendX...
       </div>
     );
   }
@@ -211,27 +330,57 @@ export default function Home() {
     );
   }
 
+  const hasERP = metrics.wednesdayHeld > 0 || (user?.totalHeld ?? 0) > 0;
+
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col justify-between">
+    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col justify-between selection:bg-emerald-500/20 selection:text-emerald-300">
       <Navbar
         user={user}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenSubjects={() => setIsSubjectsOpen(true)}
         onOpenSync={() => setIsSyncOpen(true)}
         onOpenFeedback={() => setIsFeedbackOpen(true)}
+        onOpenPeriodTracker={scrollToPeriodTracker}
         onReset={handleReset}
+        subjectCount={subjects.length}
+        hasERPInitialized={hasERP}
       />
 
-      <main className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 sm:py-8 space-y-4">
-        <AttendanceHero metrics={metrics} onOpenSync={() => setIsSyncOpen(true)} />
-        <BunkCalculatorCard metrics={metrics} />
+      <main className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        {/* Attendance Hero with Target Threshold Selector and Clean Visuals */}
+        <AttendanceHero
+          metrics={metrics}
+          onOpenSync={() => setIsSyncOpen(true)}
+          onOpenPeriodTracker={scrollToPeriodTracker}
+          onUpdateTarget={handleUpdateTarget}
+          hasERPInitialized={hasERP}
+        />
+
+        {/* Daily Period Tracker (Max 8 periods, Lecture vs Lab split) */}
+        {subjects.length > 0 && (
+          <div ref={periodTrackerRef} id="today-period-tracker">
+            <TodayPeriodTracker
+              subjects={subjects}
+              onUpdateSubjects={handleUpdateSubjects}
+              onUpdateTodayTotals={handleUpdateTodayTotals}
+            />
+          </div>
+        )}
+
+        {/* Interactive Custom Simulator (Bunk & Recovery Simulation) */}
+        <BunkCalculatorCard
+          metrics={metrics}
+          onUpdateTarget={handleUpdateTarget}
+        />
+
+        {/* MT2 Working Days & Exam Horizon */}
         <MT2CalendarView metrics={metrics} />
       </main>
 
-      <footer className="w-full border-t border-zinc-900 py-4 text-center text-xs text-zinc-500">
-        <div className="mx-auto max-w-4xl px-4 flex items-center justify-between">
+      <footer className="w-full border-t border-zinc-900 py-5 text-center text-xs text-zinc-500 bg-[#09090b]">
+        <div className="mx-auto max-w-4xl px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
-            <span>AttendX</span>
+            <span className="font-semibold text-zinc-400">AttendX</span>
             <span>•</span>
             <button
               onClick={() => setIsFeedbackOpen(true)}
@@ -242,13 +391,14 @@ export default function Home() {
           </div>
           <button
             onClick={handleReset}
-            className="text-zinc-500 hover:text-zinc-300 transition"
+            className="text-zinc-500 hover:text-zinc-300 transition text-[11px]"
           >
-            Clear Data / Change Preset
+            Clear Data / Switch Account
           </button>
         </div>
       </footer>
 
+      {/* Modals */}
       <EditBaselineModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -260,6 +410,9 @@ export default function Home() {
       <SubjectAuditModal
         isOpen={isSubjectsOpen}
         onClose={() => setIsSubjectsOpen(false)}
+        targetPercentage={metrics.targetPercentage}
+        initialSubjects={subjects}
+        onSaveSubjects={handleUpdateSubjects}
       />
 
       <ERPSyncModal

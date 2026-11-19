@@ -18,7 +18,9 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { totalHeld, academicPresent, thursdayHeld, thursdayPresent, targetPercentage, branch, factorBuffer } = body;
+    const { totalHeld, academicPresent, thursdayHeld, thursdayPresent, targetPercentage, branch, factorBuffer, custom_subjects } = body;
+
+    const subjectsJson = custom_subjects !== undefined ? JSON.stringify(custom_subjects) : null;
 
     const updated = await sql`
       UPDATE attendx_web_users
@@ -30,9 +32,10 @@ export async function PUT(req: Request) {
         thursday_present = COALESCE(${thursdayPresent !== undefined ? Number(thursdayPresent) : null}, thursday_present),
         target_percentage = COALESCE(${targetPercentage !== undefined ? Number(targetPercentage) : null}, target_percentage),
         branch = COALESCE(${branch ? branch.trim() : null}, branch),
+        custom_subjects = COALESCE(${subjectsJson}::jsonb, custom_subjects),
         updated_at = now()
       WHERE id = ${payload.id}
-      RETURNING id, username, name, branch, sem, total_held, academic_present, factor_buffer, thursday_held, thursday_present, target_percentage
+      RETURNING id, username, name, branch, sem, total_held, academic_present, factor_buffer, thursday_held, thursday_present, target_percentage, custom_subjects
     `;
 
     if (updated.length === 0) {
@@ -61,6 +64,7 @@ export async function PUT(req: Request) {
         thursdayHeld: user.thursday_held,
         thursdayPresent: user.thursday_present,
         targetPercentage: user.target_percentage,
+        custom_subjects: user.custom_subjects,
       },
       metrics,
     });

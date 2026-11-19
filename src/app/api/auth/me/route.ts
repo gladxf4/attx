@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     }
 
     const rows = await sql`
-      SELECT id, username, name, branch, sem, total_held, academic_present, factor_buffer, thursday_held, thursday_present, target_percentage
+      SELECT id, username, name, branch, sem, total_held, academic_present, factor_buffer, thursday_held, thursday_present, target_percentage, custom_subjects
       FROM attendx_web_users
       WHERE id = ${payload.id}
       LIMIT 1
@@ -50,6 +50,7 @@ export async function GET(req: Request) {
         thursdayHeld: user.thursday_held,
         thursdayPresent: user.thursday_present,
         targetPercentage: user.target_percentage,
+        custom_subjects: user.custom_subjects,
       },
       metrics,
     });
