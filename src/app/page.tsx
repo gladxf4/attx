@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
 import { Navbar } from "@/components/Navbar";
 import { AttendanceHero } from "@/components/AttendanceHero";
 import { BunkCalculatorCard } from "@/components/BunkCalculatorCard";
@@ -21,6 +22,7 @@ export default function Home() {
   const [erpDatewise, setErpDatewise] = useState<Record<string, DatewiseSubjectLog[]>>({});
   const [hasData, setHasData] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSubjectsOpen, setIsSubjectsOpen] = useState(false);
@@ -51,6 +53,15 @@ export default function Home() {
           }
         }
 
+        const storedSubs = localStorage.getItem("attendx_subjects");
+        if (storedSubs) {
+          try {
+            setSubjects(JSON.parse(storedSubs));
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
         const token = localStorage.getItem("attendx_token");
         if (token) {
           const res = await fetch("/api/auth/me", {
@@ -60,24 +71,15 @@ export default function Home() {
             const data = await res.json();
             setUser(data.user);
 
-            // Load subjects if returned from db or localStorage
             if (data.user?.custom_subjects && Array.isArray(data.user.custom_subjects) && data.user.custom_subjects.length > 0) {
               setSubjects(data.user.custom_subjects);
-            } else {
-              const storedSubs = localStorage.getItem("attendx_subjects");
-              if (storedSubs) {
-                try {
-                  setSubjects(JSON.parse(storedSubs));
-                } catch (e) {
-                  console.error(e);
-                }
-              }
             }
 
             if (data.metrics) {
               setMetrics(data.metrics);
               setHasData(true);
               setIsLoading(false);
+              triggerBackgroundErpSync();
               return;
             }
           } else {
@@ -89,14 +91,6 @@ export default function Home() {
         const savedGuest = localStorage.getItem("attendx_guest_data");
         if (savedGuest) {
           const parsed = JSON.parse(savedGuest);
-          const storedSubs = localStorage.getItem("attendx_subjects");
-          if (storedSubs) {
-            try {
-              setSubjects(JSON.parse(storedSubs));
-            } catch (e) {
-              console.error(e);
-            }
-          }
 
           const calcRes = await fetch("/api/calculate", {
             method: "POST",
@@ -108,17 +102,62 @@ export default function Home() {
             setMetrics(calcData.metrics);
             setHasData(true);
             setIsLoading(false);
+            triggerBackgroundErpSync();
             return;
           }
         }
 
-        // Neither user nor guest data found -> show onboarding screen
         setHasData(false);
       } catch (err) {
         console.error("Init error:", err);
         setHasData(false);
       } finally {
         setIsLoading(false);
+      }
+    };
+
+    // Auto-refresh ERP data on page load if session exists
+    const triggerBackgroundErpSync = async () => {
+      try {
+        const storedSession = localStorage.getItem("attendx_erp_session");
+        if (!storedSession) return;
+
+        const session = JSON.parse(storedSession);
+        if (!session.cookie) return;
+
+        setIsSyncing(true);
+        const res = await fetch("/api/erp/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "refresh_session",
+            erpSessionCookie: session.cookie,
+            erpId: session.erpId || "",
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.totalHeld && data.academicPresent) {
+            handleImportFromERP(
+              Number(data.totalHeld),
+              Number(data.academicPresent),
+              Number(data.concessionBuffer || 0),
+              data.officialPercentage ? Number(data.officialPercentage) : undefined,
+              data.subjects,
+              data.datewiseAttendance
+            );
+          }
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          if (errData.expired) {
+            localStorage.removeItem("attendx_erp_session");
+          }
+        }
+      } catch (err) {
+        console.error("Auto ERP sync error:", err);
+      } finally {
+        setIsSyncing(false);
       }
     };
 
@@ -212,7 +251,6 @@ export default function Home() {
         if (res.ok) {
           const resData = await res.json();
           setUser(resData.user);
-          // Only overwrite metrics from server if no pending local debounced changes
           if (!saveDebounceTimerRef.current && resData.metrics) {
             setMetrics(resData.metrics);
           }
@@ -227,7 +265,6 @@ export default function Home() {
     } else {
       const guestPayload = { ...data, concessionBuffer: bufferVal };
       localStorage.setItem("attendx_guest_data", JSON.stringify(guestPayload));
-      // In guest mode, metrics are already synchronously updated locally
     }
   };
 
@@ -253,7 +290,6 @@ export default function Home() {
       finalBuffer = Math.max(0, Math.round((officialPct / 100) * held) - present);
     }
 
-    // ERP is the authoritative ground truth: reset any temporary manual markings for today
     const baseSubjects = importedSubjects && importedSubjects.length > 0 ? importedSubjects : subjects;
     const cleanedSubjects = baseSubjects.map((s) => ({
       ...s,
@@ -271,7 +307,7 @@ export default function Home() {
     const updated = {
       totalHeld: held,
       academicPresent: present,
-      thursdayHeld: 0, // Reset today's manual increment: ERP provides the full official total
+      thursdayHeld: 0,
       thursdayPresent: 0,
       targetPercentage: metrics?.targetPercentage ?? 75,
       concessionBuffer: finalBuffer,
@@ -281,7 +317,6 @@ export default function Home() {
     handleSaveSettings(updated);
   };
 
-  // Update target threshold (e.g. 75, 80, 85)
   const handleUpdateTarget = (newTarget: number) => {
     if (!metrics) return;
     const updated = {
@@ -296,23 +331,7 @@ export default function Home() {
     handleSaveSettings(updated);
   };
 
-  // Today Period Tracker: update individual periods and totals
-  const handleUpdateTodayTotals = (held: number, present: number) => {
-    if (!metrics) return;
-    const updated = {
-      totalHeld: metrics.wednesdayHeld,
-      academicPresent: metrics.wednesdayPresent,
-      thursdayHeld: held,
-      thursdayPresent: present,
-      targetPercentage: metrics.targetPercentage || 75,
-      concessionBuffer: metrics.concessionBuffer,
-      custom_subjects: subjects,
-    };
-    handleSaveSettings(updated);
-  };
-
   const handleUpdateSubjects = (updatedSubjects: SubjectRecord[]) => {
-    // 1. Immediately update subjects locally with 0ms delay
     setSubjects(updatedSubjects);
     try {
       localStorage.setItem("attendx_subjects", JSON.stringify(updatedSubjects));
@@ -323,7 +342,6 @@ export default function Home() {
     const newHeld = updatedSubjects.reduce((acc, s) => acc + (s.todayHeld || 0), 0);
     const newPres = updatedSubjects.reduce((acc, s) => acc + (s.todayPresent || 0), 0);
 
-    // 2. Immediately recalculate attendance metrics synchronously (0ms delay)
     if (metrics) {
       const immediate = calculateAttendanceMetrics(
         metrics.wednesdayHeld,
@@ -336,7 +354,6 @@ export default function Home() {
       );
       setMetrics(immediate);
 
-      // 3. Debounce background server sync to eliminate UI stutter & duplicate network traffic
       if (saveDebounceTimerRef.current) {
         clearTimeout(saveDebounceTimerRef.current);
       }
@@ -363,7 +380,7 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-zinc-500 text-xs font-mono">
+      <div className="min-h-screen apple-canvas flex items-center justify-center text-zinc-400 text-xs font-mono">
         Loading AttendX...
       </div>
     );
@@ -401,10 +418,11 @@ export default function Home() {
         onReset={handleReset}
         subjectCount={subjects.length}
         hasERPInitialized={hasERP}
+        isSyncing={isSyncing}
       />
 
       <main className="mx-auto w-full max-w-4xl px-3.5 sm:px-6 py-4 sm:py-6 space-y-6">
-        {/* Attendance Hero with Target Threshold Selector and Clean Visuals */}
+        {/* Attendance Hero */}
         <AttendanceHero
           metrics={metrics}
           onOpenSync={() => setIsSyncOpen(true)}
@@ -413,7 +431,7 @@ export default function Home() {
           hasERPInitialized={hasERP}
         />
 
-        {/* Daily Period Tracker (Max 8 periods, Lecture vs Lab split) */}
+        {/* Daily Period Tracker (Collapsed by default) */}
         {subjects.length > 0 && (
           <div ref={periodTrackerRef} id="today-period-tracker">
             <TodayPeriodTracker
@@ -423,7 +441,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Interactive Custom Simulator (Bunk & Recovery Simulation) */}
+        {/* Attendance Simulator */}
         <BunkCalculatorCard
           metrics={metrics}
           onUpdateTarget={handleUpdateTarget}
@@ -442,7 +460,7 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className="w-full border-t border-white/[0.06] py-6 text-center text-xs text-zinc-500 bg-transparent">
+      <footer className="w-full border-t border-white/[0.06] py-6 text-xs text-zinc-500">
         <div className="mx-auto max-w-4xl px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <span className="font-semibold text-zinc-300">AttendX</span>
@@ -454,12 +472,9 @@ export default function Home() {
               Feedback
             </button>
           </div>
-          <button
-            onClick={handleReset}
-            className="text-zinc-500 hover:text-zinc-300 transition text-[11px]"
-          >
-            Clear Local Data
-          </button>
+          <span className="text-[11px] text-zinc-600">
+            Precision attendance engine for college students
+          </span>
         </div>
       </footer>
 

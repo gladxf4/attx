@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, LogIn, UserPlus, Lock, User, Sparkles, AlertCircle } from "lucide-react";
+import { X, LogIn, UserPlus, Lock, User, AlertCircle } from "lucide-react";
+import { motion } from "framer-motion";
 import { UserProfile, AttendanceMetrics } from "@/lib/types";
 
 interface AuthModalProps {
@@ -60,23 +61,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl glass-card border border-slate-700 p-6 sm:p-7 shadow-2xl relative glow-primary">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.2 }}
+        className="w-full max-w-md apple-card bg-[#0e0f17] p-6 shadow-2xl relative"
+      >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          className="absolute right-4 top-4 rounded-lg p-1 text-zinc-400 hover:text-white hover:bg-white/[0.06] transition"
         >
-          <X className="h-5 w-5" />
+          <X className="h-4 w-4" />
         </button>
 
         {/* Tab Toggle */}
-        <div className="flex border-b border-slate-800 mb-6 pb-2">
+        <div className="flex border-b border-white/[0.08] mb-6 pb-2">
           <button
             onClick={() => { setTab("login"); setError(null); }}
             className={`pb-2 text-sm font-semibold transition border-b-2 mr-6 ${
               tab === "login"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "border-white text-white"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
             Sign In
@@ -85,8 +92,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
             onClick={() => { setTab("register"); setError(null); }}
             className={`pb-2 text-sm font-semibold transition border-b-2 ${
               tab === "register"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "border-white text-white"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
             Create Account
@@ -94,7 +101,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
         </div>
 
         {error && (
-          <div className="mb-4 flex items-center space-x-2 rounded-lg bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-300">
+          <div className="mb-4 flex items-center space-x-2 rounded-xl bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-300">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -102,35 +109,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">
               Admission No / ERP ID
             </label>
             <div className="relative">
-              <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+              <User className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
               <input
                 type="text"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="2025B15..."
-                className="w-full rounded-lg border border-slate-700 bg-slate-900/80 pl-9 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                placeholder="2025B1531..."
+                className="w-full rounded-xl border border-white/[0.08] bg-zinc-900 pl-9 pr-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-white/[0.2] focus:outline-none"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Password *
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+              Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+              <Lock className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full rounded-lg border border-slate-700 bg-slate-900/80 pl-9 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-white/[0.08] bg-zinc-900 pl-9 pr-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-white/[0.2] focus:outline-none"
               />
             </div>
           </div>
@@ -138,8 +145,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           {tab === "register" && (
             <>
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Full Name *
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Full Name
                 </label>
                 <input
                   type="text"
@@ -147,41 +154,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Enter full name"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl border border-white/[0.08] bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-white/[0.2] focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Branch / Year (Optional)
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Branch / Section (Optional)
                 </label>
                 <input
                   type="text"
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
-                  placeholder="e.g. CSE-2, ECE-3"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                  placeholder="e.g. AIML-3A, CSE-2"
+                  className="w-full rounded-xl border border-white/[0.08] bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-white/[0.2] focus:outline-none"
                 />
               </div>
             </>
           )}
 
-          <p className="text-[11px] text-slate-500">
-            {tab === "register"
-              ? "Your baseline attendance data will be saved securely to Neon DB."
-              : "Sign in to sync your saved total lectures and custom settings across devices."}
-          </p>
-
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full flex items-center justify-center space-x-2 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 hover:brightness-110 transition disabled:opacity-50"
+            className="w-full flex items-center justify-center space-x-2 rounded-xl bg-white py-2.5 text-xs font-semibold text-zinc-950 shadow-md hover:bg-zinc-200 transition disabled:opacity-50"
           >
             {tab === "login" ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
             <span>{isLoading ? "Please wait..." : tab === "login" ? "Sign In" : "Create Account"}</span>
           </button>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 };

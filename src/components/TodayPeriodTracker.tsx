@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, Minus, Beaker, BookOpen, RotateCcw, CheckCircle2, AlertCircle, Info } from "lucide-react";
+import { Plus, Minus, RotateCcw, ChevronDown, ChevronUp, Beaker, BookOpen } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { SubjectRecord } from "@/lib/types";
 
 interface TodayPeriodTrackerProps {
@@ -13,8 +14,9 @@ interface TodayPeriodTrackerProps {
 export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
   subjects,
   onUpdateSubjects,
-  onUpdateTodayTotals,
 }) => {
+  // Collapsed by default as requested
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [filter, setFilter] = useState<"all" | "labs" | "lectures">("all");
 
   // Determine whether a subject is a lab or lecture
@@ -33,13 +35,11 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
     );
   };
 
-  // Calculate current totals for today across all subjects
   const totalHeldToday = subjects.reduce((acc, s) => acc + (s.todayHeld || 0), 0);
   const totalPresentToday = subjects.reduce((acc, s) => acc + (s.todayPresent || 0), 0);
   const totalAbsentToday = Math.max(0, totalHeldToday - totalPresentToday);
   const remainingPeriods = Math.max(0, 8 - totalHeldToday);
 
-  // Update a single subject's held/present periods for today
   const updateSubjectPeriods = (
     code: string,
     deltaHeld: number,
@@ -51,11 +51,8 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
       const currentHeld = s.todayHeld || 0;
       const currentPres = s.todayPresent || 0;
 
-      // New held clamped between 0 and remaining capacity
       const maxPossibleHeld = currentHeld + remainingPeriods;
       const newHeld = Math.max(0, Math.min(maxPossibleHeld, currentHeld + deltaHeld));
-
-      // New present clamped between 0 and newHeld
       const newPres = Math.max(0, Math.min(newHeld, currentPres + deltaPresent));
 
       return {
@@ -68,7 +65,6 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
     onUpdateSubjects(updated);
   };
 
-  // Toggle subject classification (Lab vs Lecture)
   const toggleSubjectType = (code: string) => {
     const updated = subjects.map((s) => {
       if (s.code !== code) return s;
@@ -81,8 +77,8 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
     onUpdateSubjects(updated);
   };
 
-  // Reset all today's entries
-  const handleResetToday = () => {
+  const handleResetToday = (e: React.MouseEvent) => {
+    e.stopPropagation();
     const updated = subjects.map((s) => ({
       ...s,
       todayHeld: 0,
@@ -99,222 +95,246 @@ export const TodayPeriodTracker: React.FC<TodayPeriodTrackerProps> = ({
   });
 
   return (
-    <div className="apple-card p-5 sm:p-6 space-y-5">
-      {/* Header & Capacity Bar */}
-      <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+    <div className="apple-card overflow-hidden">
+      {/* Clickable Header Bar (Always Visible) */}
+      <div
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 cursor-pointer select-none hover:bg-white/[0.02] transition"
+      >
+        <div className="flex items-center space-x-3.5">
+          <div className="h-9 w-9 rounded-xl bg-zinc-900 border border-white/[0.08] flex items-center justify-center text-zinc-300 shrink-0">
+            <BookOpen className="h-4 w-4" />
+          </div>
           <div>
-            <h3 className="text-sm font-semibold text-white flex items-center space-x-2">
-              <span>Today's Period Marking</span>
-              <span className="text-[10px] font-mono font-normal text-zinc-400 bg-zinc-900 border border-white/[0.08] px-2 py-0.5 rounded-full">
+            <div className="flex items-center space-x-2">
+              <h3 className="text-sm font-semibold text-white">Today's Period Marking</h3>
+              <span className="text-[11px] font-mono text-zinc-400">
                 Thu, 19 Nov
               </span>
-            </h3>
+            </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Mark today's attended periods. These unconfirmed marks are automatically superseded upon next ERP sync.
+              {totalHeldToday === 0
+                ? "Mark periods attended today (max 8 per day)"
+                : `${totalHeldToday} of 8 periods marked · ${totalPresentToday} attended`}
             </p>
           </div>
-
-          {totalHeldToday > 0 && (
-            <button
-              onClick={handleResetToday}
-              className="text-[11px] text-zinc-400 hover:text-rose-400 flex items-center space-x-1 transition self-start sm:self-auto"
-            >
-              <RotateCcw className="h-3 w-3" />
-              <span>Reset Today</span>
-            </button>
-          )}
         </div>
 
-        {/* 8-Period Capacity Meter */}
-        <div className="p-3.5 bg-zinc-900/60 rounded-xl border border-white/[0.08] space-y-2.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-medium text-zinc-200">
-              {totalHeldToday} of 8 Periods Marked
-            </span>
-            <div className="flex items-center space-x-3 text-[11px]">
-              <span className="text-emerald-400 font-medium">{totalPresentToday} Attended</span>
-              <span className="text-rose-400 font-medium">{totalAbsentToday} Bunked</span>
-              <span className="text-zinc-500">{remainingPeriods} Open Slots</span>
-            </div>
-          </div>
-
-          {/* 8-dot visual slots */}
-          <div className="grid grid-cols-8 gap-1.5 h-2">
+        {/* Status Indicators & Collapse Chevron */}
+        <div className="flex items-center space-x-3 self-end sm:self-auto">
+          {/* Visual 8-slot meter */}
+          <div className="flex items-center space-x-1">
             {Array.from({ length: 8 }).map((_, i) => {
-              let slotColor = "bg-zinc-800";
+              let dotBg = "bg-zinc-800";
               if (i < totalPresentToday) {
-                slotColor = "bg-emerald-500 shadow-sm shadow-emerald-500/20";
+                dotBg = "bg-emerald-400";
               } else if (i < totalHeldToday) {
-                slotColor = "bg-rose-500 shadow-sm shadow-rose-500/20";
+                dotBg = "bg-rose-400";
               }
               return (
                 <div
                   key={i}
-                  className={`rounded-full transition-all duration-300 ${slotColor}`}
-                  title={`Period ${i + 1}`}
+                  className={`h-2 w-2 rounded-full transition-colors duration-200 ${dotBg}`}
                 />
               );
             })}
           </div>
-        </div>
-      </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5">
-        <div className="flex items-center space-x-1.5 text-xs">
-          <button
-            onClick={() => setFilter("all")}
-            className={`px-2.5 py-1 rounded-md transition ${
-              filter === "all"
-                ? "bg-zinc-800 text-white font-medium"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            All Courses ({subjects.length})
-          </button>
-          <button
-            onClick={() => setFilter("labs")}
-            className={`px-2.5 py-1 rounded-md flex items-center space-x-1 transition ${
-              filter === "labs"
-                ? "bg-zinc-800 text-purple-300 font-medium"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Beaker className="h-3 w-3 text-purple-400" />
-            <span>Labs & Workshops</span>
-          </button>
-          <button
-            onClick={() => setFilter("lectures")}
-            className={`px-2.5 py-1 rounded-md flex items-center space-x-1 transition ${
-              filter === "lectures"
-                ? "bg-zinc-800 text-blue-300 font-medium"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <BookOpen className="h-3 w-3 text-blue-400" />
-            <span>Lectures</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Subject Period List */}
-      <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-        {filteredSubjects.map((s) => {
-          const isLab = isLabCourse(s);
-          const currentHeld = s.todayHeld || 0;
-          const currentPres = s.todayPresent || 0;
-          const currentAbs = Math.max(0, currentHeld - currentPres);
-
-          return (
-            <div
-              key={s.code}
-              className={`p-3 rounded-lg border transition ${
-                currentHeld > 0
-                  ? "bg-zinc-900 border-zinc-700/80"
-                  : "bg-zinc-900/40 border-zinc-800/60 hover:border-zinc-700/50"
-              }`}
+          {totalHeldToday > 0 && (
+            <button
+              type="button"
+              onClick={handleResetToday}
+              className="text-[11px] text-zinc-400 hover:text-rose-400 flex items-center space-x-1 p-1 transition"
+              title="Reset all today's entries"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                {/* Course Info */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => toggleSubjectType(s.code)}
-                      className={`text-[10px] px-1.5 py-0.5 rounded font-medium border transition ${
-                        isLab
-                          ? "bg-purple-500/10 border-purple-500/20 text-purple-300"
-                          : "bg-blue-500/10 border-blue-500/20 text-blue-300"
-                      }`}
-                      title="Tap to toggle between Lab and Lecture"
-                    >
-                      {isLab ? "Lab (2 Lec)" : "Lecture"}
-                    </button>
-                    <span className="text-xs font-medium text-white truncate">
-                      {s.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 mt-1 text-[11px] text-zinc-500 font-mono">
-                    <span>{s.code}</span>
-                    <span>•</span>
-                    <span>ERP Baseline: {s.pres}/{s.held} ({s.pct}%)</span>
-                  </div>
-                </div>
+              <RotateCcw className="h-3 w-3" />
+            </button>
+          )}
 
-                {/* Period Controls */}
-                <div className="flex items-center space-x-4 self-end sm:self-auto shrink-0">
-                  {/* Held periods stepper */}
-                  <div className="flex flex-col items-center">
-                    <span className="text-[10px] text-zinc-500 mb-0.5">Periods Held</span>
-                    <div className="flex items-center space-x-1.5 bg-zinc-950 border border-zinc-800 rounded p-1">
-                      <button
-                        type="button"
-                        onClick={() => updateSubjectPeriods(s.code, -1, currentPres > currentHeld - 1 ? -1 : 0)}
-                        disabled={currentHeld <= 0}
-                        className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-25 flex items-center justify-center transition"
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="font-mono text-xs font-semibold text-white w-5 text-center">
-                        {currentHeld}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => updateSubjectPeriods(s.code, 1, 1)}
-                        disabled={remainingPeriods <= 0}
-                        className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-25 flex items-center justify-center transition"
-                        title={remainingPeriods <= 0 ? "Daily 8 periods limit reached" : "Add period"}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
+          <div className="text-zinc-400 p-1">
+            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </div>
+        </div>
+      </div>
 
-                  {/* Attended periods stepper */}
-                  {currentHeld > 0 && (
-                    <div className="flex flex-col items-center">
-                      <span className="text-[10px] text-zinc-500 mb-0.5">Attended</span>
-                      <div className="flex items-center space-x-1.5 bg-zinc-950 border border-zinc-800 rounded p-1">
-                        <button
-                          type="button"
-                          onClick={() => updateSubjectPeriods(s.code, 0, -1)}
-                          disabled={currentPres <= 0}
-                          className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-25 flex items-center justify-center transition"
-                        >
-                          <Minus className="h-3 w-3" />
-                        </button>
-                        <span className="font-mono text-xs font-semibold text-emerald-400 w-5 text-center">
-                          {currentPres}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateSubjectPeriods(s.code, 0, 1)}
-                          disabled={currentPres >= currentHeld}
-                          className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-25 flex items-center justify-center transition"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
+      {/* Collapsible Content */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            className="border-t border-white/[0.06] p-5 sm:p-6 space-y-4"
+          >
+            {/* Filter Tabs */}
+            <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center space-x-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg transition ${
+                    filter === "all"
+                      ? "bg-zinc-800 text-white font-medium"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  All ({subjects.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilter("labs")}
+                  className={`px-2.5 py-1 rounded-lg transition ${
+                    filter === "labs"
+                      ? "bg-purple-950/40 text-purple-300 font-medium border border-purple-800/40"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Labs & Workshops
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilter("lectures")}
+                  className={`px-2.5 py-1 rounded-lg transition ${
+                    filter === "lectures"
+                      ? "bg-blue-950/40 text-blue-300 font-medium border border-blue-800/40"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Lectures
+                </button>
+              </div>
+
+              <span className="text-[11px] text-zinc-500 font-mono">
+                {remainingPeriods} slot{remainingPeriods !== 1 ? "s" : ""} left today
+              </span>
+            </div>
+
+            {/* Subject Period List */}
+            <div className="space-y-1.5 max-h-[360px] overflow-y-auto pr-1">
+              {filteredSubjects.map((s) => {
+                const isLab = isLabCourse(s);
+                const currentHeld = s.todayHeld || 0;
+                const currentPres = s.todayPresent || 0;
+                const currentAbs = Math.max(0, currentHeld - currentPres);
+
+                return (
+                  <div
+                    key={s.code}
+                    className={`p-3 rounded-xl border transition ${
+                      currentHeld > 0
+                        ? "bg-zinc-900/80 border-white/[0.12]"
+                        : "bg-zinc-900/40 border-white/[0.05] hover:border-white/[0.09]"
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                      {/* Course Info without ugly pill boxes */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleSubjectType(s.code)}
+                            className="flex items-center space-x-1.5 text-left text-xs font-medium text-white truncate hover:text-zinc-300 transition"
+                            title="Click to toggle Lab vs Lecture"
+                          >
+                            <span
+                              className={`h-2 w-2 rounded-full shrink-0 ${
+                                isLab ? "bg-purple-400" : "bg-blue-400"
+                              }`}
+                            />
+                            <span className="truncate">{s.name}</span>
+                          </button>
+                          <span className="text-[10px] text-zinc-500 font-mono">
+                            {isLab ? "Lab" : "Lec"}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                          {s.code}
+                        </div>
+                      </div>
+
+                      {/* Period Steppers */}
+                      <div className="flex items-center space-x-3 self-end sm:self-auto shrink-0">
+                        {/* Held Periods Stepper */}
+                        <div className="flex items-center space-x-1.5 bg-[#090a0f] border border-white/[0.08] rounded-lg p-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateSubjectPeriods(
+                                s.code,
+                                -1,
+                                currentPres > currentHeld - 1 ? -1 : 0
+                              )
+                            }
+                            disabled={currentHeld <= 0}
+                            className="h-6 w-6 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-25 flex items-center justify-center transition"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="font-mono text-xs font-semibold text-white w-6 text-center">
+                            {currentHeld}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateSubjectPeriods(s.code, 1, 1)}
+                            disabled={remainingPeriods <= 0}
+                            className="h-6 w-6 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-25 flex items-center justify-center transition"
+                            title={
+                              remainingPeriods <= 0 ? "Daily 8 limit reached" : "Add period"
+                            }
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+
+                        {/* Attended Stepper */}
+                        {currentHeld > 0 && (
+                          <div className="flex items-center space-x-1.5 bg-[#090a0f] border border-white/[0.08] rounded-lg p-1">
+                            <button
+                              type="button"
+                              onClick={() => updateSubjectPeriods(s.code, 0, -1)}
+                              disabled={currentPres <= 0}
+                              className="h-6 w-6 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-25 flex items-center justify-center transition"
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
+                            <span className="font-mono text-xs font-semibold text-emerald-400 w-6 text-center">
+                              {currentPres}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateSubjectPeriods(s.code, 0, 1)}
+                              disabled={currentPres >= currentHeld}
+                              className="h-6 w-6 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-25 flex items-center justify-center transition"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Status preview */}
+                        {currentHeld > 0 && (
+                          <div className="text-right text-[11px] font-mono min-w-[54px]">
+                            {currentAbs > 0 ? (
+                              <span className="text-rose-400 font-medium">
+                                {currentAbs} bunked
+                              </span>
+                            ) : (
+                              <span className="text-emerald-400 font-medium">
+                                100% att.
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
-
-                  {/* Status pill if logged */}
-                  {currentHeld > 0 && (
-                    <div className="text-right text-[11px] font-mono min-w-[50px]">
-                      {currentAbs > 0 ? (
-                        <span className="text-rose-400 font-semibold">{currentAbs} Bunked</span>
-                      ) : (
-                        <span className="text-emerald-400 font-semibold">100% Att.</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

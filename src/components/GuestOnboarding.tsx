@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { ArrowRight, Minus, Plus, AlertCircle, HelpCircle, Pencil, Info } from "lucide-react";
+import { motion } from "framer-motion";
 import { UserProfile } from "@/lib/types";
 import { getDynamicBaselineInfo } from "@/lib/attendanceEngine";
 
@@ -29,7 +30,6 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
 
   const baselineInfo = getDynamicBaselineInfo();
 
-  // Baseline lecture inputs (starts empty in production)
   const [totalHeldInput, setTotalHeldInput] = useState<string>("");
   const [presentInput, setPresentInput] = useState<string>("");
   const [officialPctInput, setOfficialPctInput] = useState<string>("");
@@ -41,12 +41,9 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
     setAuthError(null);
   };
 
-  // Today's classes: default 8 held, 0 attended
   const [thursdayHeld, setThursdayHeld] = useState<number>(8);
   const [thursdayPresent, setThursdayPresent] = useState<number>(0);
-  const [targetPercentage] = useState<number>(75);
 
-  // Auth inputs
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -148,25 +145,30 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        {/* Minimal Brand */}
-        <div className="flex items-center justify-center space-x-2.5 mb-6">
-          <div className="h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 p-1 flex items-center justify-center">
+    <div className="min-h-screen apple-canvas flex flex-col items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-sm"
+      >
+        {/* Brand */}
+        <div className="flex items-center justify-center space-x-3 mb-6">
+          <div className="h-10 w-10 rounded-2xl bg-zinc-900 border border-white/[0.1] p-1.5 flex items-center justify-center shadow-inner">
             <img src="/logo.png" alt="AttendX" className="h-full w-full object-contain" />
           </div>
-          <span className="font-semibold text-base text-white tracking-tight">AttendX</span>
+          <span className="font-bold text-lg text-white tracking-tight">AttendX</span>
         </div>
 
         {/* Card */}
-        <div className="clean-card p-5 border border-zinc-800">
+        <div className="apple-card p-6">
           {/* Mode Switcher */}
-          <div className="grid grid-cols-2 p-1 bg-zinc-900 rounded-lg border border-zinc-800 mb-4 text-xs font-medium">
+          <div className="grid grid-cols-2 p-1 bg-zinc-900 rounded-xl border border-white/[0.08] mb-4 text-xs font-medium">
             <button
               onClick={() => { setMode("guest"); setAuthError(null); }}
-              className={`py-1.5 rounded transition ${
+              className={`py-1.5 rounded-lg transition ${
                 mode === "guest"
-                  ? "bg-zinc-800 text-white"
+                  ? "bg-zinc-800 text-white shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
@@ -174,9 +176,9 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
             </button>
             <button
               onClick={() => { setMode("auth"); setAuthError(null); }}
-              className={`py-1.5 rounded transition ${
+              className={`py-1.5 rounded-lg transition ${
                 mode === "auth"
-                  ? "bg-zinc-800 text-white"
+                  ? "bg-zinc-800 text-white shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
@@ -185,7 +187,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
           </div>
 
           {authError && (
-            <div className="flex items-center space-x-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg mb-3">
+            <div className="flex items-center space-x-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl mb-3">
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               <span>{authError}</span>
             </div>
@@ -193,11 +195,10 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
 
           {mode === "guest" ? (
             <form onSubmit={handleGuestSubmit} className="space-y-3.5">
-              {/* Notice on ERP Data Timing */}
-              <div className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1">
+              <div className="p-3 bg-zinc-900/70 rounded-xl border border-white/[0.08] space-y-1">
                 <div className="flex items-center space-x-1.5 text-zinc-300 font-medium text-xs">
                   <Info className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-                  <span>Notice on ERP Total Held & Attended</span>
+                  <span>ERP Baseline Notice</span>
                 </div>
                 <p className="text-[11px] text-zinc-400 leading-normal">
                   {baselineInfo.erpNoticeText}
@@ -205,62 +206,50 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
               </div>
 
               {/* Baseline Section */}
-              <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-2.5">
+              <div className="p-3 bg-zinc-900/50 rounded-xl border border-white/[0.08] space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-1">
-                    <span className="font-medium text-zinc-200">Baseline Attendance</span>
-                    <span className="text-[11px] text-zinc-500">({baselineInfo.yesterdayDateStr})</span>
-                  </div>
+                  <span className="font-medium text-zinc-200">Baseline Attendance</span>
                   <button
                     type="button"
                     onClick={handleLoadAIMLBenchmark}
-                    className="flex items-center space-x-1 text-[11px] text-zinc-400 hover:text-white transition px-2 py-0.5 rounded bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/80"
+                    className="flex items-center space-x-1 text-[11px] text-zinc-400 hover:text-white transition px-2 py-0.5 rounded-lg bg-zinc-800/80 border border-white/[0.08]"
                     title="Load AIML-3A baseline as of Wed 18 Nov (421 held / 316 present)"
                   >
                     <Pencil className="h-3 w-3 text-zinc-300" />
-                    <span>AIML-3A Default</span>
+                    <span>AIML-3A Preset</span>
                   </button>
-                </div>
-
-                <div className="text-[11px] text-zinc-400 bg-zinc-950/70 rounded p-2 border border-zinc-800/80 flex items-center justify-between">
-                  <div>
-                    <span className="text-zinc-300 font-medium">AIML-3A Benchmark:</span>{" "}
-                    <span className="font-mono text-zinc-200">421 held / 316 att.</span>{" "}
-                    <span className="text-[10px] text-zinc-500">(as of Wed 18 Nov)</span>
-                  </div>
-                  <span className="text-zinc-500 text-[10px]">Tap button to edit/apply</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[11px] text-zinc-400 mb-1">Total Held *</label>
+                    <label className="block text-[11px] text-zinc-400 mb-1">Total Held</label>
                     <input
                       type="number"
                       min="1"
                       required
-                      placeholder="e.g. 420"
+                      placeholder="e.g. 421"
                       value={totalHeldInput}
                       onChange={(e) => setTotalHeldInput(e.target.value)}
-                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                      className="w-full rounded-xl border border-white/[0.08] bg-[#090a0f] px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-zinc-400 mb-1">Attended *</label>
+                    <label className="block text-[11px] text-zinc-400 mb-1">Attended</label>
                     <input
                       type="number"
                       min="0"
                       required
-                      placeholder="e.g. 315"
+                      placeholder="e.g. 316"
                       value={presentInput}
                       onChange={(e) => setPresentInput(e.target.value)}
-                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                      className="w-full rounded-xl border border-white/[0.08] bg-[#090a0f] px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
                     />
                   </div>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] text-zinc-400">Official Attendance % (Bottom of ERP page)</label>
+                    <label className="block text-[11px] text-zinc-400">Official Attendance (%)</label>
                     <span className="text-[10px] text-zinc-500">Optional</span>
                   </div>
                   <input
@@ -268,33 +257,30 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
                     step="0.01"
                     min="0"
                     max="100"
-                    placeholder="e.g. 79.01 (shown at bottom of ERP page)"
+                    placeholder="e.g. 78.64 (from ERP)"
                     value={officialPctInput}
                     onChange={(e) => setOfficialPctInput(e.target.value)}
-                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                    className="w-full rounded-xl border border-white/[0.08] bg-[#090a0f] px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
                   />
-                  <p className="text-[10px] text-zinc-500 mt-1">
-                    The consolidated percentage shown at the bottom of your ERP attendance page.
-                  </p>
                 </div>
               </div>
 
-              {/* Today's Classes (Default: 8 held, 0 attended) */}
-              <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-2.5">
+              {/* Today's Classes */}
+              <div className="p-3 bg-zinc-900/50 rounded-xl border border-white/[0.08] space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium text-zinc-200">Today: Thu, 19 Nov</span>
-                  <span className="text-[11px] text-zinc-500">8 periods/day</span>
+                  <span className="text-[11px] text-zinc-500 font-mono">8 periods/day</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
                     <label className="block text-[11px] text-zinc-400 mb-1">Held Today</label>
-                    <div className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded p-1">
+                    <div className="flex items-center justify-between bg-[#090a0f] border border-white/[0.08] rounded-xl p-1">
                       <button
                         type="button"
                         onClick={() => updateHeldToday(thursdayHeld - 1)}
                         disabled={thursdayHeld <= 0}
-                        className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
+                        className="h-6 w-6 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
@@ -305,7 +291,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
                         type="button"
                         onClick={() => updateHeldToday(thursdayHeld + 1)}
                         disabled={thursdayHeld >= 8}
-                        className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
+                        className="h-6 w-6 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
                       >
                         <Plus className="h-3 w-3" />
                       </button>
@@ -314,12 +300,12 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
 
                   <div>
                     <label className="block text-[11px] text-zinc-400 mb-1">Attended Today</label>
-                    <div className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded p-1">
+                    <div className="flex items-center justify-between bg-[#090a0f] border border-white/[0.08] rounded-xl p-1">
                       <button
                         type="button"
                         onClick={() => updateAttendedToday(thursdayPresent - 1)}
                         disabled={thursdayPresent <= 0}
-                        className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
+                        className="h-6 w-6 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
@@ -330,7 +316,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
                         type="button"
                         onClick={() => updateAttendedToday(thursdayPresent + 1)}
                         disabled={thursdayPresent >= thursdayHeld}
-                        className="h-6 w-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
+                        className="h-6 w-6 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 flex items-center justify-center transition"
                       >
                         <Plus className="h-3 w-3" />
                       </button>
@@ -342,7 +328,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
               {/* Submit */}
               <button
                 type="submit"
-                className="w-full flex items-center justify-center space-x-1.5 rounded-lg bg-white text-zinc-950 font-medium py-2 text-xs hover:bg-zinc-200 transition"
+                className="w-full flex items-center justify-center space-x-1.5 rounded-xl bg-white text-zinc-950 font-semibold py-2.5 text-xs hover:bg-zinc-200 transition shadow-md"
               >
                 <span>Calculate Bunks</span>
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -350,7 +336,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
             </form>
           ) : (
             <form onSubmit={handleAuthSubmit} className="space-y-3">
-              <div className="flex border-b border-zinc-800 pb-1.5 mb-2 text-xs font-medium">
+              <div className="flex border-b border-white/[0.08] pb-1.5 mb-2 text-xs font-medium">
                 <button
                   type="button"
                   onClick={() => { setAuthTab("login"); setAuthError(null); }}
@@ -377,76 +363,37 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
 
               <div>
                 <label className="block text-[11px] text-zinc-400 mb-0.5">
-                  Admission No *
+                  Admission No
                 </label>
                 <input
                   type="text"
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="2025B15..."
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
+                  placeholder="2025B1531..."
+                  className="w-full rounded-xl border border-white/[0.08] bg-[#090a0f] px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
                 />
               </div>
 
               {authTab === "register" && (
-                <>
-                  <div>
-                    <label className="block text-[11px] text-zinc-400 mb-0.5">
-                      Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Enter full name"
-                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-0.5">Total Held</label>
-                      <input
-                        type="number"
-                        placeholder="e.g. 420"
-                        value={totalHeldInput}
-                        onChange={(e) => setTotalHeldInput(e.target.value)}
-                        className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-0.5">Attended</label>
-                      <input
-                        type="number"
-                        placeholder="e.g. 315"
-                        value={presentInput}
-                        onChange={(e) => setPresentInput(e.target.value)}
-                        className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-zinc-400 mb-0.5">
-                      Official Attendance % (Bottom of ERP page)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="e.g. 79.01 (shown at bottom of ERP page)"
-                      value={officialPctInput}
-                      onChange={(e) => setOfficialPctInput(e.target.value)}
-                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
-                    />
-                  </div>
-                </>
+                <div>
+                  <label className="block text-[11px] text-zinc-400 mb-0.5">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter full name"
+                    className="w-full rounded-xl border border-white/[0.08] bg-[#090a0f] px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
+                  />
+                </div>
               )}
 
               <div>
                 <label className="block text-[11px] text-zinc-400 mb-0.5">
-                  Password *
+                  Password
                 </label>
                 <input
                   type="password"
@@ -454,14 +401,14 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
+                  className="w-full rounded-xl border border-white/[0.08] bg-[#090a0f] px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full rounded-lg bg-white text-zinc-950 font-medium py-2 text-xs hover:bg-zinc-200 transition disabled:opacity-50 mt-1"
+                className="w-full rounded-xl bg-white text-zinc-950 font-semibold py-2.5 text-xs hover:bg-zinc-200 transition disabled:opacity-50 mt-1 shadow-md"
               >
                 {isLoading ? "Please wait..." : authTab === "login" ? "Sign In" : "Register"}
               </button>
@@ -481,7 +428,7 @@ export const GuestOnboarding: React.FC<GuestOnboardingProps> = ({
             </button>
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 };

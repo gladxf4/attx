@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import {
   X,
-  Zap,
+  RotateCw,
   Lock,
   User,
   Pencil,
@@ -14,9 +14,9 @@ import {
   AlertCircle,
   Loader2,
   KeyRound,
-  RotateCcw,
   CheckCircle2,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface ERPSyncModalProps {
   isOpen: boolean;
@@ -38,31 +38,26 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
   onImportNumbers,
   defaultAdmissionNo = "",
 }) => {
-  // Step state: 'active_session' (if saved) | 'credentials' | 'otp'
   const [step, setStep] = useState<"active_session" | "credentials" | "otp">("credentials");
 
-  // Inputs
   const [erpId, setErpId] = useState(defaultAdmissionNo);
   const [isEditingAdmission, setIsEditingAdmission] = useState(!defaultAdmissionNo);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
 
-  // Session state from step 1 for step 2 verification
   const [sessionState, setSessionState] = useState<any>(null);
   const [otpNotice, setOtpNotice] = useState<string>(
-    "A one-time password has been sent by the college ERP to your registered email and mobile number."
+    "A one-time verification code has been dispatched by college ERP to your registered mobile and email."
   );
   const [savedSessionCookie, setSavedSessionCookie] = useState<string | null>(null);
   const [savedSessionUser, setSavedSessionUser] = useState<string | null>(null);
 
-  // Status & Feedback
   const [isLoading, setIsLoading] = useState(false);
   const [loadingText, setLoadingText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Load existing session on open
   useEffect(() => {
     if (!isOpen) return;
 
@@ -85,7 +80,6 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
       console.error(e);
     }
 
-    // Default to credentials if no valid session
     if (defaultAdmissionNo) {
       setErpId(defaultAdmissionNo);
       setIsEditingAdmission(false);
@@ -132,10 +126,9 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
         data.datewiseAttendance
       );
       onClose();
-    }, 700);
+    }, 600);
   };
 
-  // 1. One-click sync with active session
   const handleQuickSync = async () => {
     if (!savedSessionCookie) {
       setStep("credentials");
@@ -144,7 +137,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
 
     setIsLoading(true);
     setError(null);
-    setLoadingText("Querying live attendance from ERP...");
+    setLoadingText("Fetching live attendance records...");
 
     try {
       const res = await fetch("/api/erp/connect", {
@@ -177,7 +170,6 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
     }
   };
 
-  // 2. Request OTP (Step 1)
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -188,7 +180,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
     }
 
     setIsLoading(true);
-    setLoadingText("Authenticating credentials with ERP...");
+    setLoadingText("Authenticating with ERP...");
 
     try {
       const res = await fetch("/api/erp/connect", {
@@ -203,16 +195,14 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Authentication failed. Please verify your credentials.");
+        throw new Error(data.error || "Authentication failed. Please verify credentials.");
       }
 
-      // If user immediately authenticated (staff or session bypassed OTP)
       if (data.success) {
         handleApplyAttendance(data);
         return;
       }
 
-      // OTP Dispatched
       if (data.step === "otp_required") {
         setSessionState(data.sessionState);
         if (data.message) setOtpNotice(data.message);
@@ -225,13 +215,12 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
     }
   };
 
-  // 3. Verify OTP (Step 2)
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (!otp.trim()) {
-      setError("Please enter the OTP received on your mobile or email.");
+      setError("Please enter the OTP received.");
       return;
     }
 
@@ -265,67 +254,70 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-md clean-card border border-zinc-800 bg-zinc-950/95 p-5 shadow-2xl relative">
-        {/* Close Button */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.2 }}
+        className="w-full max-w-md apple-card bg-[#0e0f17] p-6 shadow-2xl relative"
+      >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 text-zinc-400 hover:text-white p-1 rounded-md hover:bg-zinc-800/80 transition"
+          className="absolute right-4 top-4 text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-white/[0.06] transition"
         >
           <X className="h-4 w-4" />
         </button>
 
-        {/* Modal Header */}
-        <div className="mb-4">
-          <div className="flex items-center space-x-2">
-            <div className="h-7 w-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <Zap className="h-4 w-4 fill-amber-400" />
+        {/* Header */}
+        <div className="mb-5">
+          <div className="flex items-center space-x-2.5">
+            <div className="h-8 w-8 rounded-xl bg-zinc-900 border border-white/[0.08] flex items-center justify-center text-zinc-300">
+              <RotateCw className="h-4 w-4" />
             </div>
-            <h2 className="text-base font-semibold text-white tracking-tight">
-              ERP Direct Connector
-            </h2>
+            <div>
+              <h2 className="text-base font-semibold text-white tracking-tight">
+                ERP Sync
+              </h2>
+              <p className="text-xs text-zinc-400">
+                Official college ERP synchronization
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
-            Official college ERP synchronization without scrapers or manual entry.
-          </p>
         </div>
 
-        {/* Success Alert */}
+        {/* Alerts */}
         {successMsg && (
-          <div className="flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg mb-4">
+          <div className="flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl mb-4">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
 
-        {/* Error Alert */}
         {error && (
-          <div className="flex items-center space-x-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg mb-4">
+          <div className="flex items-center space-x-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl mb-4">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
-        {/* VIEW 1: ACTIVE SESSION VIEW (1-Click Instant Sync) */}
+        {/* VIEW 1: ACTIVE SESSION */}
         {step === "active_session" && (
           <div className="space-y-4">
-            <div className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-2">
+            <div className="p-3.5 bg-zinc-900/70 rounded-xl border border-white/[0.08] space-y-1.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
                   <span className="text-xs font-semibold text-white">
-                    ERP Session Authenticated
+                    Session Connected
                   </span>
                 </div>
-                <span className="text-[10px] text-zinc-500 font-mono">
+                <span className="text-[11px] text-zinc-400 font-mono">
                   {savedSessionUser || erpId}
                 </span>
               </div>
               <p className="text-xs text-zinc-400 leading-normal">
-                Your authenticated session is active. Sync the latest attendance records directly from the college ERP in one click without re-entering your password or OTP.
+                Your authenticated session is active. Sync latest attendance records in one click.
               </p>
             </div>
 
@@ -333,7 +325,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
               type="button"
               onClick={handleQuickSync}
               disabled={isLoading}
-              className="w-full flex items-center justify-center space-x-2 rounded-lg bg-white text-zinc-950 font-semibold py-2.5 text-xs hover:bg-zinc-200 transition disabled:opacity-50 shadow-md"
+              className="w-full flex items-center justify-center space-x-2 rounded-xl bg-white text-zinc-950 font-semibold py-2.5 text-xs hover:bg-zinc-200 transition disabled:opacity-50 shadow-md"
             >
               {isLoading ? (
                 <>
@@ -342,8 +334,8 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                 </>
               ) : (
                 <>
-                  <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-                  <span>Sync Latest Attendance Now</span>
+                  <RotateCw className="h-3.5 w-3.5" />
+                  <span>Sync Latest Attendance</span>
                 </>
               )}
             </button>
@@ -356,23 +348,21 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                   setSavedSessionCookie(null);
                   setStep("credentials");
                 }}
-                className="text-[11px] text-zinc-400 hover:text-zinc-200 flex items-center space-x-1 transition"
+                className="text-[11px] text-zinc-400 hover:text-zinc-200 transition"
               >
-                <RotateCcw className="h-3 w-3" />
-                <span>Switch Account / Sign In with Another ID</span>
+                Sign In with another ID
               </button>
             </div>
           </div>
         )}
 
-        {/* VIEW 2: CREDENTIALS INPUT FORM (Step 1) */}
+        {/* VIEW 2: CREDENTIALS */}
         {step === "credentials" && (
           <form onSubmit={handleRequestOtp} className="space-y-3.5">
-            {/* Admission No / ERP ID */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-medium text-zinc-300">
-                  Admission No / ERP ID *
+                  Admission No / ERP ID
                 </label>
                 {!isEditingAdmission && defaultAdmissionNo && (
                   <button
@@ -393,8 +383,8 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                   readOnly={!isEditingAdmission && !!defaultAdmissionNo}
                   value={erpId}
                   onChange={(e) => setErpId(e.target.value)}
-                  placeholder="2025B15... or 2024B..."
-                  className={`w-full rounded-lg border px-3 py-2 pl-9 text-xs font-mono text-white transition focus:outline-none ${
+                  placeholder="2025B1531..."
+                  className={`w-full rounded-xl border px-3 py-2 pl-9 text-xs font-mono text-white transition focus:outline-none ${
                     !isEditingAdmission && defaultAdmissionNo
                       ? "bg-zinc-900/60 border-zinc-800 text-zinc-400 cursor-not-allowed"
                       : "bg-zinc-900 border-zinc-700 text-white focus:border-zinc-500"
@@ -403,11 +393,10 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
               </div>
             </div>
 
-            {/* ERP Password */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-medium text-zinc-300">
-                  ERP Password *
+                  ERP Password
                 </label>
                 <a
                   href="https://erp.abes.ac.in/Login.aspx"
@@ -415,7 +404,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                   rel="noopener noreferrer"
                   className="text-[11px] text-zinc-400 hover:text-white flex items-center space-x-1 transition"
                 >
-                  <span>Forgot Password?</span>
+                  <span>Forgot?</span>
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
@@ -426,8 +415,8 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your ERP portal password"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 pl-9 pr-9 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:outline-none transition"
+                  placeholder="Portal password"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 pl-9 pr-9 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:outline-none transition"
                 />
                 <button
                   type="button"
@@ -439,14 +428,10 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
               </div>
             </div>
 
-            <p className="text-[11px] text-zinc-500 leading-normal">
-              Your credentials are used solely to negotiate a secure session with the official college ERP and are never permanently stored.
-            </p>
-
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center space-x-2 rounded-lg bg-white text-zinc-950 font-semibold py-2.5 text-xs hover:bg-zinc-200 transition disabled:opacity-50 shadow-md mt-2"
+              className="w-full flex items-center justify-center space-x-2 rounded-xl bg-white text-zinc-950 font-semibold py-2.5 text-xs hover:bg-zinc-200 transition disabled:opacity-50 shadow-md mt-2"
             >
               {isLoading ? (
                 <>
@@ -455,7 +440,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                 </>
               ) : (
                 <>
-                  <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                  <RotateCw className="h-3.5 w-3.5" />
                   <span>Connect & Send OTP</span>
                 </>
               )}
@@ -463,22 +448,22 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
           </form>
         )}
 
-        {/* VIEW 3: OTP VERIFICATION FORM (Step 2) */}
+        {/* VIEW 3: OTP */}
         {step === "otp" && (
           <form onSubmit={handleVerifyOtp} className="space-y-4">
-            <div className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1">
+            <div className="p-3 bg-zinc-900/80 rounded-xl border border-white/[0.08] space-y-1">
               <div className="flex items-center space-x-1.5 text-xs text-zinc-200 font-medium">
-                <KeyRound className="h-4 w-4 text-amber-400 shrink-0" />
+                <KeyRound className="h-4 w-4 text-zinc-300 shrink-0" />
                 <span>Verification Code Sent</span>
               </div>
-              <p className="text-[11px] text-zinc-300 leading-normal">
+              <p className="text-[11px] text-zinc-400 leading-normal">
                 {otpNotice}
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-zinc-300 mb-1">
-                Enter OTP Code *
+                Enter OTP Code
               </label>
               <input
                 type="text"
@@ -487,15 +472,15 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                 maxLength={8}
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
-                placeholder="Enter received OTP"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-center text-sm font-mono tracking-widest text-white placeholder-zinc-500 focus:border-zinc-500 focus:outline-none transition"
+                placeholder="OTP Code"
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-center text-sm font-mono tracking-widest text-white placeholder-zinc-500 focus:border-zinc-500 focus:outline-none transition"
               />
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center space-x-2 rounded-lg bg-white text-zinc-950 font-semibold py-2.5 text-xs hover:bg-zinc-200 transition disabled:opacity-50 shadow-md"
+              className="w-full flex items-center justify-center space-x-2 rounded-xl bg-white text-zinc-950 font-semibold py-2.5 text-xs hover:bg-zinc-200 transition disabled:opacity-50 shadow-md"
             >
               {isLoading ? (
                 <>
@@ -504,7 +489,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                 </>
               ) : (
                 <>
-                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                  <Check className="h-3.5 w-3.5" />
                   <span>Verify OTP & Sync Attendance</span>
                 </>
               )}
@@ -519,7 +504,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
                 }}
                 className="text-zinc-400 hover:text-white transition"
               >
-                ← Back to Login
+                ← Back
               </button>
               <button
                 type="button"
@@ -532,7 +517,7 @@ export const ERPSyncModal: React.FC<ERPSyncModalProps> = ({
             </div>
           </form>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 };
