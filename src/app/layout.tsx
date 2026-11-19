@@ -22,7 +22,7 @@ const mono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AttendX",
+  title: "AttendX — Attendance Tracker & Skip Planner",
   description: "Track your college attendance, plan skips and stay above the cutoff.",
   applicationName: "AttendX",
   appleWebApp: {

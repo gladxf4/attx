@@ -374,7 +374,9 @@ export default function Home() {
   const setTab = (t: Tab) => {
     setTabState(t);
     try {
-      history.replaceState(null, "", `#${t}`);
+      // location.replace keeps the hash in sync without going through Next's patched
+      // history API, which would re-apply the static metadata title.
+      window.location.replace(`#${t}`);
     } catch {}
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -383,6 +385,17 @@ export default function Home() {
     setPlan(p);
     writeJSON(K.plan, p);
   };
+
+  // Browser tab title reflects the current view (and the live percentage on Overview).
+  const titlePct = att ? computeMetrics(att, getHorizon(cal, today, att.todayHeld)).percentage : null;
+  useEffect(() => {
+    if (phase !== "app" || titlePct === null) {
+      document.title = "AttendX — Attendance Tracker & Skip Planner";
+      return;
+    }
+    const label = TABS.find((t) => t.id === tab)?.label ?? "Overview";
+    document.title = tab === "overview" ? `${titlePct.toFixed(2)}% · AttendX` : `${label} · AttendX`;
+  }, [phase, tab, titlePct]);
 
   const erpLogs = useMemo(() => getErpDay(datewise, today), [datewise, today]);
   const erpTotals = useMemo(() => sumLogs(erpLogs), [erpLogs]);
