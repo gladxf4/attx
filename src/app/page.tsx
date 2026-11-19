@@ -5,43 +5,22 @@ import { Navbar } from "@/components/Navbar";
 import { AttendanceHero } from "@/components/AttendanceHero";
 import { BunkCalculatorCard } from "@/components/BunkCalculatorCard";
 import { MT2CalendarView } from "@/components/MT2CalendarView";
-import { AuthModal } from "@/components/AuthModal";
 import { EditBaselineModal } from "@/components/EditBaselineModal";
 import { SubjectAuditModal } from "@/components/SubjectAuditModal";
+import { GuestOnboarding } from "@/components/GuestOnboarding";
 import { UserProfile, AttendanceMetrics } from "@/lib/types";
-import { Sparkles, Sliders, ShieldCheck, Heart } from "lucide-react";
 
 export default function Home() {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [metrics, setMetrics] = useState<AttendanceMetrics>({
-    wednesdayHeld: 421,
-    wednesdayPresent: 316,
-    wednesdayPercentage: 78.86,
-    thursdayHeld: 3,
-    thursdayPresent: 3,
-    currentTotalHeld: 424,
-    currentTotalPresent: 335,
-    currentPercentage: 79.01,
-    targetPercentage: 75,
-    isEligibleForMT2: true,
-    safeBunksRemaining: 22,
-    safeDaysBunkable: 2,
-    classesNeededFor75: 0,
-    workingDaysUntilMT2: 6,
-    totalLecturesUntilMT2: 45,
-    minClassesToAttendBeforeMT2: 17,
-    goofyQuote: "Safe zone achieved! You can enter the MT2 exam hall with your head held high.",
-    statusTier: "safe",
-  });
+  const [metrics, setMetrics] = useState<AttendanceMetrics | null>(null);
+  const [hasData, setHasData] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSubjectsOpen, setIsSubjectsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Load user from localStorage token or fetch guest calculate
   useEffect(() => {
-    const initApp = async () => {
+    const init = async () => {
       try {
         const token = localStorage.getItem("attendx_token");
         if (token) {
@@ -51,66 +30,93 @@ export default function Home() {
           if (res.ok) {
             const data = await res.json();
             setUser(data.user);
-            if (data.metrics) setMetrics(data.metrics);
-            setIsLoading(false);
-            return;
+            if (data.metrics) {
+              setMetrics(data.metrics);
+              setHasData(true);
+              setIsLoading(false);
+              return;
+            }
           } else {
             localStorage.removeItem("attendx_token");
           }
         }
 
-        // Check local baseline overrides in localStorage for guest
-        const savedBaseline = localStorage.getItem("attendx_guest_baseline");
-        const baselineData = savedBaseline
-          ? JSON.parse(savedBaseline)
-          : {
-              totalHeld: 421,
-              academicPresent: 316,
-              thursdayHeld: 3,
-              thursdayPresent: 3,
-              targetPercentage: 75,
-            };
-
-        const calcRes = await fetch("/api/calculate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(baselineData),
-        });
-
-        if (calcRes.ok) {
-          const calcData = await calcRes.json();
-          setMetrics(calcData.metrics);
+        // Check if guest data exists in browser
+        const savedGuest = localStorage.getItem("attendx_guest_data");
+        if (savedGuest) {
+          const parsed = JSON.parse(savedGuest);
+          const calcRes = await fetch("/api/calculate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(parsed),
+          });
+          if (calcRes.ok) {
+            const calcData = await calcRes.json();
+            setMetrics(calcData.metrics);
+            setHasData(true);
+            setIsLoading(false);
+            return;
+          }
         }
+
+        // Neither user nor guest data found -> show onboarding screen
+        setHasData(false);
       } catch (err) {
-        console.error("Initialization error:", err);
+        console.error("Init error:", err);
+        setHasData(false);
       } finally {
         setIsLoading(false);
       }
     };
 
-    initApp();
+    init();
   }, []);
 
-  const handleAuthSuccess = (token: string, newUser: UserProfile, newMetrics?: AttendanceMetrics) => {
-    localStorage.setItem("attendx_token", token);
-    setUser(newUser);
-    if (newMetrics) {
-      setMetrics(newMetrics);
-    } else {
-      // Re-fetch me
-      fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((d) => {
-          if (d.metrics) setMetrics(d.metrics);
-        });
+  const handleCompleteGuest = async (data: {
+    totalHeld: number;
+    academicPresent: number;
+    thursdayHeld: number;
+    thursdayPresent: number;
+    targetPercentage: number;
+  }) => {
+    localStorage.setItem("attendx_guest_data", JSON.stringify(data));
+    try {
+      const calcRes = await fetch("/api/calculate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (calcRes.ok) {
+        const calcData = await calcRes.json();
+        setMetrics(calcData.metrics);
+        setHasData(true);
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  const handleLogout = () => {
+  const handleLoginSuccess = (token: string, newUser: UserProfile) => {
+    localStorage.setItem("attendx_token", token);
+    setUser(newUser);
+    fetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.metrics) {
+          setMetrics(d.metrics);
+          setHasData(true);
+        }
+      });
+  };
+
+  const handleReset = () => {
     localStorage.removeItem("attendx_token");
+    localStorage.removeItem("attendx_guest_data");
     setUser(null);
+    setMetrics(null);
+    setHasData(false);
   };
 
   const handleSaveSettings = async (data: {
@@ -119,7 +125,6 @@ export default function Home() {
     thursdayHeld: number;
     thursdayPresent: number;
     targetPercentage: number;
-    branch?: string;
   }) => {
     const token = localStorage.getItem("attendx_token");
     if (token && user) {
@@ -137,8 +142,7 @@ export default function Home() {
         setMetrics(resData.metrics);
       }
     } else {
-      // Save locally for guest
-      localStorage.setItem("attendx_guest_baseline", JSON.stringify(data));
+      localStorage.setItem("attendx_guest_data", JSON.stringify(data));
       const calcRes = await fetch("/api/calculate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -151,49 +155,50 @@ export default function Home() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-zinc-500 text-sm">
+        Loading AttendX...
+      </div>
+    );
+  }
+
+  // If no user or guest data has been provided, show the clean gateway
+  if (!hasData || !metrics) {
+    return (
+      <GuestOnboarding
+        onCompleteGuest={handleCompleteGuest}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col justify-between">
-      {/* Navigation */}
+    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col justify-between">
       <Navbar
         user={user}
-        onOpenAuth={() => setIsAuthOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenSubjects={() => setIsSubjectsOpen(true)}
-        onLogout={handleLogout}
+        onReset={handleReset}
       />
 
-      {/* Main Container */}
-      <main className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-        {/* Attendance Hero */}
+      <main className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 sm:py-8 space-y-5">
         <AttendanceHero metrics={metrics} />
-
-        {/* Bunk Scorecard & Simulator */}
         <BunkCalculatorCard metrics={metrics} />
-
-        {/* MT2 Roadmap Calendar */}
         <MT2CalendarView metrics={metrics} />
       </main>
 
-      {/* Footer */}
-      <footer className="w-full border-t border-slate-900 bg-[#070a12] py-6 text-center text-xs text-slate-500">
-        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <span>AttendX v2.0 Web</span>
-            <span>•</span>
-            <span>Built for ABES Engineering College Students</span>
-          </div>
-          <div className="flex items-center space-x-1 text-slate-400">
-            <span>Powered by Neon DB & Vercel</span>
-          </div>
+      <footer className="w-full border-t border-zinc-900 py-5 text-center text-xs text-zinc-500">
+        <div className="mx-auto max-w-4xl px-4 flex items-center justify-between">
+          <span>AttendX • ABES Attendance & Bunk Predictor</span>
+          <button
+            onClick={handleReset}
+            className="text-zinc-500 hover:text-zinc-300 transition"
+          >
+            Clear Data / Change User
+          </button>
         </div>
       </footer>
-
-      {/* Modals */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        onAuthSuccess={handleAuthSuccess}
-      />
 
       <EditBaselineModal
         isOpen={isSettingsOpen}

@@ -1,11 +1,11 @@
 export interface UserProfile {
   id: string;
   username: string;
-  name: string;
-  branch: string;
-  sem: string;
-  totalHeld: number; // As of Wednesday 18 Nov default
-  academicPresent: number; // As of Wednesday 18 Nov default
+  name?: string;
+  branch?: string;
+  sem?: string;
+  totalHeld: number; // As of Wednesday 18 Nov baseline
+  academicPresent: number; // As of Wednesday 18 Nov baseline
   thursdayHeld: number; // Thursday 19 Nov
   thursdayPresent: number; // Thursday 19 Nov
   targetPercentage: number;
@@ -40,7 +40,7 @@ export interface AttendanceMetrics {
 
   // Humor & Status
   goofyQuote: string;
-  statusTier: "god" | "safe" | "borderline" | "critical";
+  statusTier: "safe" | "caution" | "critical";
 }
 
 export interface CalendarDayInfo {

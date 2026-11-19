@@ -1,55 +1,51 @@
-export function getGoofyQuote(percentage: number): { quote: string; tier: "god" | "safe" | "borderline" | "critical" } {
+export function getGoofyQuote(percentage: number): { quote: string; tier: "safe" | "caution" | "critical" } {
   if (percentage >= 80) {
     const quotes = [
-      "God tier attendance! Even your HOD gives you a respectful nod in the hallway.",
-      "You're attending classes like college is giving out free iPhone drops. Go grab a chai, you can afford to bunk.",
-      "Attendance higher than the class average GPA. Absolute academic weapon.",
-      "Faculty might ask you to mark the register soon. Take a break!",
-      "You have enough attendance buffer to hibernate through a couple of rainy days."
+      "You have enough attendance buffer to sleep through the next rain alarm.",
+      "Comfortably above 80%. Even your faculty probably won't notice if you take Friday off.",
+      "Academic cushion secured. Go grab a canteen chai, you can afford a bunk.",
+      "Attendance higher than average. You're chilling until finals.",
     ];
     return {
       quote: quotes[Math.floor(Math.random() * quotes.length)],
-      tier: "god"
+      tier: "safe",
     };
   }
 
   if (percentage >= 75) {
     const quotes = [
-      "Safe zone achieved! You can enter the MT2 exam hall with your head held high.",
-      "Calculated survival: comfortably above 75%, completely off the proctor's radar.",
-      "You have safe bunks in your pocket, but spend them wisely like gold coins.",
-      "Eligible for Midterms! The ERP gods smile upon your optimal effort.",
-      "Living on the sweet spot of college life: maximum fun, zero debarment panic."
+      "Safe for MT2. The proctor will let you into the exam hall with zero drama.",
+      "Right above 75%. You have some bunks, just don't burn them all in one day.",
+      "Calculated survival: eligible for exams, safe from debarment notices.",
+      "Clean record for midterms. Maintain the streak and you're good.",
     ];
     return {
       quote: quotes[Math.floor(Math.random() * quotes.length)],
-      tier: "safe"
+      tier: "safe",
     };
   }
 
   if (percentage >= 70) {
     const quotes = [
-      "🚨 Danger zone! The proctor is looking for you. Do not miss that 9 AM class tomorrow.",
-      "You're right on the fence! Put down the canteen samosa and walk to class.",
-      "Time to sit on the first bench and aggressively nod at whatever the teacher says.",
-      "One unapproved bunk and you'll be running around collecting fake medical certificates.",
-      "MT2 eligibility is blinking yellow. Lock in for the next few days!"
+      "Just under 75%. Skip the canteen samosa and catch the 9 AM lecture.",
+      "Borderline zone. One unexcused bunk and you're collecting teacher signatures.",
+      "A couple of consecutive classes will pull you back into the green.",
+      "Lock in for the next few days to secure your MT2 admit card.",
     ];
     return {
       quote: quotes[Math.floor(Math.random() * quotes.length)],
-      tier: "borderline"
+      tier: "caution",
     };
   }
 
   const quotes = [
-    "🔥 Critical alert! Even the college Wi-Fi doesn't recognize your face anymore.",
-    "Time to start drafting your apology email to the Dean. 100% attendance streak needed!",
-    "Debarred list warning! You need to attend every single period between now and MT2.",
-    "Tell your roommate to physically drag you out of bed every morning until exams.",
-    "Only consecutive attendance and heavy prayers can salvage MT2 eligibility now."
+    "Below 70%. Time to sit in the first row and nod at every single sentence.",
+    "Critical zone. You need a solid attendance streak between now and MT2.",
+    "Debarment risk is real. Tell your roommate to drag you to class tomorrow.",
+    "Don't miss a single period until midterms start.",
   ];
   return {
     quote: quotes[Math.floor(Math.random() * quotes.length)],
-    tier: "critical"
+    tier: "critical",
   };
 }
