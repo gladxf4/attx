@@ -135,7 +135,7 @@ export default function Home() {
     const token = localStorage.getItem("attendx_token");
     const bufferVal = data.concessionBuffer !== undefined ? data.concessionBuffer : (metrics?.concessionBuffer || 0);
 
-    if (token && user) {
+    if (token) {
       const res = await fetch("/api/attendance", {
         method: "PUT",
         headers: {
@@ -151,6 +151,7 @@ export default function Home() {
         const resData = await res.json();
         setUser(resData.user);
         setMetrics(resData.metrics);
+        setHasData(true);
       }
     } else {
       const guestPayload = { ...data, concessionBuffer: bufferVal };

@@ -38,10 +38,15 @@ function cookieJarToHeader(jar: Record<string, string>): string {
 }
 
 async function fetchAttendanceData(cookieHeader: string, erpId?: string) {
-  const defaultSem = inferSemester(erpId);
-  const semestersToTry = [defaultSem, "CS03", "CS01", "CS05", "CS07"].filter(
-    (v, i, a) => a.indexOf(v) === i
-  );
+  const semestersToTry = [
+    "CS03",
+    "CS01",
+    "CS05",
+    "CS07",
+    "CS04",
+    "CS06",
+    "CS02",
+  ];
 
   const ajaxHeaders = {
     Accept: "application/json, text/javascript, */*; q=0.01",
@@ -53,8 +58,9 @@ async function fetchAttendanceData(cookieHeader: string, erpId?: string) {
     Referer: `${ERP_BASE}/ERP/Dashboard/Student/Attendance/Default.aspx`,
   };
 
-  let sumData: any = null;
-  let activeSem = defaultSem;
+  let bestRows: any = null;
+  let bestHeld = -1;
+  let activeSem = "CS03";
 
   for (const sem of semestersToTry) {
     try {
@@ -74,9 +80,13 @@ async function fetchAttendanceData(cookieHeader: string, erpId?: string) {
         if (json?.d && json.d !== "[]" && json.d !== "") {
           const rows = JSON.parse(json.d);
           if (Array.isArray(rows) && rows.length > 0) {
-            sumData = rows;
-            activeSem = sem;
-            break;
+            const totalRow = rows[rows.length - 1];
+            const held = parseInt(totalRow?.NoOfLecture) || 0;
+            if (held > bestHeld) {
+              bestHeld = held;
+              bestRows = rows;
+              activeSem = sem;
+            }
           }
         }
       }
@@ -84,6 +94,8 @@ async function fetchAttendanceData(cookieHeader: string, erpId?: string) {
       // Continue to next semester attempt
     }
   }
+
+  const sumData = bestRows;
 
   if (!sumData || sumData.length === 0) {
     throw new Error(
