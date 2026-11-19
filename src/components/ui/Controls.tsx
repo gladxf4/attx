@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Minus, Plus } from "lucide-react";
-import { ReactNode, useId } from "react";
+import { ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 
 export function Segmented<T extends string>({
@@ -20,9 +20,28 @@ export function Segmented<T extends string>({
   className?: string;
   full?: boolean;
 }) {
-  const id = useId();
+  // The pill is positioned from the active button's offset inside this control, so it
+  // only ever slides horizontally, even when the surrounding layout moves or resizes.
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<{ x: number; width: number } | null>(null);
+  const activeIndex = options.findIndex((o) => o.value === value);
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const measure = () => {
+      const btn = list.children[activeIndex + 1] as HTMLElement | undefined;
+      if (btn) setPill({ x: btn.offsetLeft, width: btn.offsetWidth });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [activeIndex, options.length]);
+
   return (
     <div
+      ref={listRef}
       role="tablist"
       className={cn(
         "relative inline-flex items-center rounded-xl border border-white/[0.07] bg-black/30 p-1",
@@ -30,6 +49,13 @@ export function Segmented<T extends string>({
         className
       )}
     >
+      <motion.span
+        aria-hidden
+        className="absolute bottom-1 left-0 top-1 rounded-lg border border-white/[0.08] bg-white/[0.09] shadow-sm"
+        initial={false}
+        animate={pill ? { x: pill.x, width: pill.width, opacity: 1 } : { opacity: 0 }}
+        transition={{ type: "spring", stiffness: 500, damping: 38 }}
+      />
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -46,13 +72,6 @@ export function Segmented<T extends string>({
               active ? "text-white" : "text-zinc-400 hover:text-zinc-200"
             )}
           >
-            {active && (
-              <motion.span
-                layoutId={`seg-${id}`}
-                className="absolute inset-0 -z-10 rounded-lg border border-white/[0.08] bg-white/[0.09] shadow-sm"
-                transition={{ type: "spring", stiffness: 500, damping: 38 }}
-              />
-            )}
             {o.label}
           </button>
         );

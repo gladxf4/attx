@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, CalendarCheck2, CircleAlert, Link2, Route, TriangleAlert } from "lucide-react";
 import { ProgressRing, Meter } from "@/components/ui/Controls";
 import { TargetPicker } from "./TargetPicker";
-import { formatPct } from "@/lib/attendanceEngine";
+import { describeDays, formatPct } from "@/lib/attendanceEngine";
 import { diffDays, longDate, shortDate } from "@/lib/dates";
 import { AttendanceMetrics, Horizon, SubjectRecord } from "@/lib/types";
 import { Tab } from "@/components/shell/Dock";
@@ -44,8 +44,7 @@ export function OverviewView(p: Props) {
     );
 
   const daysToCutoff = diffDays(p.today, h.cutoffDate);
-  const skipDays = Math.floor(m.safeBunks / p.lecturesPerDay);
-  const skipRem = m.safeBunks % p.lecturesPerDay;
+  const skipDaysText = describeDays(m.safeBunks, p.lecturesPerDay);
 
   const atRisk = [...p.subjects].sort((a, b) => a.pct - b.pct).slice(0, 5);
 
@@ -100,12 +99,7 @@ export function OverviewView(p: Props) {
                 <p className="mt-2 text-sm text-zinc-300">
                   lecture{m.safeBunks === 1 ? "" : "s"} and stay at {T}%
                 </p>
-                {m.safeBunks >= p.lecturesPerDay && (
-                  <p className="mt-1 text-xs text-zinc-500">
-                    ≈ {skipDays} full day{skipDays === 1 ? "" : "s"}
-                    {skipRem > 0 ? ` + ${skipRem}` : ""}
-                  </p>
-                )}
+                {skipDaysText && <p className="mt-1 text-xs text-zinc-500">{skipDaysText} of lectures</p>}
               </>
             ) : (
               <>

@@ -48,6 +48,21 @@ export function formatPct(v: number, digits = 2): string {
   return `${(Math.round(v * 10 ** digits) / 10 ** digits).toFixed(digits)}%`;
 }
 
+/**
+ * Expresses lectures as days, rounded down to the nearest half day so it never
+ * overstates a safe-skip budget: 20 @ 8/day -> "That's 2½ days", 23 -> "More than 2½ days".
+ */
+export function describeDays(lectures: number, lecturesPerDay: number): string | null {
+  if (lecturesPerDay <= 0 || !Number.isFinite(lectures) || lectures * 2 < lecturesPerDay) return null;
+  const halves = Math.floor((lectures * 2) / lecturesPerDay);
+  const exact = (lectures * 2) % lecturesPerDay === 0;
+  const whole = Math.floor(halves / 2);
+  const half = halves % 2 === 1;
+  const amount =
+    whole === 0 ? "half a day" : `${whole}${half ? "½" : ""} ${whole === 1 && !half ? "day" : "days"}`;
+  return `${exact ? "That's" : "More than"} ${amount}`;
+}
+
 /** Remaining lecture slots between now and the cutoff, derived from the real date. */
 export function getHorizon(cal: AcademicCalendar, today: string, todayHeld: number): Horizon {
   const passed = today >= cal.cutoffDate;
