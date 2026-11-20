@@ -1,14 +1,15 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { BookOpen, CalendarCheck2, Gauge, Route } from "lucide-react";
+import { BookOpen, CalendarCheck2, Gauge, ListChecks, Route } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-export type Tab = "overview" | "today" | "planner" | "subjects";
+export type Tab = "overview" | "today" | "unmarked" | "planner" | "subjects";
 
 export const TABS: { id: Tab; label: string; icon: typeof Gauge }[] = [
   { id: "overview", label: "Overview", icon: Gauge },
   { id: "today", label: "Today", icon: CalendarCheck2 },
+  { id: "unmarked", label: "Unmarked", icon: ListChecks },
   { id: "planner", label: "Planner", icon: Route },
   { id: "subjects", label: "Subjects", icon: BookOpen },
 ];

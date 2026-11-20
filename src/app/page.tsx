@@ -10,6 +10,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { Onboarding } from "@/components/Onboarding";
 import { OverviewView } from "@/components/views/OverviewView";
 import { TodayView } from "@/components/views/TodayView";
+import { UnmarkedView } from "@/components/views/UnmarkedView";
 import { PlannerView } from "@/components/views/PlannerView";
 import { SubjectsView } from "@/components/views/SubjectsView";
 import { CalendarSheet } from "@/components/views/CalendarSheet";
@@ -534,6 +535,15 @@ export default function Home() {
                 onSetSimpleToday={(h, p) => commit({ ...att, todayHeld: h, todayPresent: Math.min(h, p) })}
               />
             )}
+            {tab === "unmarked" && (
+              <UnmarkedView
+                metrics={metrics}
+                today={today}
+                datewise={datewise}
+                lecturesPerDay={cal.lecturesPerDay}
+                onConnectErp={() => setSheet("erp")}
+              />
+            )}
             {tab === "planner" && (
               <PlannerView
                 metrics={metrics}
@@ -559,7 +569,13 @@ export default function Home() {
         <Credits className="mt-12" />
       </main>
 
-      <Dock tab={tab} onChange={setTab} />
+      <Dock
+        tab={tab}
+        onChange={setTab}
+        badges={{
+          unmarked: isWorkingDay(today, cal) && erpTotals.held < cal.lecturesPerDay ? cal.lecturesPerDay - erpTotals.held : undefined,
+        }}
+      />
 
       {sheets}
       <CalendarSheet
